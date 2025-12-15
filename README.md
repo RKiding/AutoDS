@@ -161,9 +161,7 @@ When HITL is enabled, the system will pause for human approval at critical point
 
 ## 🏗️ Architecture
 
-<p align="center">
-  <img src="../architecture.png" alt="AutoDS Architecture" width="800">
-</p>
+![AutoDS Architecture](https://raw.githubusercontent.com/RKiding/AutoDS/main/figs/architecture.png)
 
 The system follows a hierarchical agent architecture:
 
