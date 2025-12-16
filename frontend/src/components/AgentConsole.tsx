@@ -57,6 +57,9 @@ const AgentConsole: React.FC = () => {
 
   const SESSIONS_KEY = 'autods_sessions'
 
+  // Ref for debouncing log saves to backend
+  const saveLogsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+
   // Load config from backend on mount
   React.useEffect(() => {
     loadConfig()
@@ -114,87 +117,113 @@ const AgentConsole: React.FC = () => {
     }
   }
 
-  const loadSessions = () => {
-    try {
-      const raw = window.localStorage.getItem(SESSIONS_KEY)
-      const items = raw ? JSON.parse(raw) : []
-      setSessions(items)
-    } catch (e) {
-      console.error('Failed to load sessions', e)
-      setSessions([])
-    }
-  }
+  // ==================== Session Management via Backend API ====================
 
-  const saveSessions = (items: Array<any>) => {
+  const loadSessions = async () => {
     try {
-      window.localStorage.setItem(SESSIONS_KEY, JSON.stringify(items))
-      setSessions(items)
+      const resp = await fetch(`${API_URL}/api/sessions`)
+      const data = await resp.json()
+      if (data.sessions) {
+        setSessions(data.sessions)
+      }
     } catch (e) {
-      console.error('Failed to save sessions', e)
+      console.error('Failed to load sessions from backend', e)
+      // Fallback: try to load from localStorage for migration
+      try {
+        const raw = window.localStorage.getItem(SESSIONS_KEY)
+        const items = raw ? JSON.parse(raw) : []
+        if (items.length > 0) {
+          console.log('Migrating sessions from localStorage to backend...')
+          // Migrate sessions to backend
+          for (const session of items) {
+            await fetch(`${API_URL}/api/sessions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: session.name })
+            })
+          }
+          // Clear localStorage after migration
+          window.localStorage.removeItem(SESSIONS_KEY)
+          // Reload from backend
+          const resp = await fetch(`${API_URL}/api/sessions`)
+          const data = await resp.json()
+          if (data.sessions) {
+            setSessions(data.sessions)
+          }
+        } else {
+          setSessions([])
+        }
+      } catch (migrationError) {
+        console.error('Failed to migrate sessions', migrationError)
+        setSessions([])
+      }
     }
   }
 
   const createSession = async (name?: string) => {
-    const id = Date.now()
-    const sessionName = name || `Session ${sessions.length + 1}`
-
-    // Request backend to create a unique hashed workspace for this session
-    // Group name under which all session workspaces will be created
-    const SESSION_GROUP = 'workspacea'
-
-    let workspace = `session_${id}`
-    let group: string | undefined = undefined
     try {
-      const resp = await fetch(`${API_URL}/api/create-workspace?group=${encodeURIComponent(SESSION_GROUP)}`, { method: 'POST' })
+      const resp = await fetch(`${API_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name || undefined })
+      })
       const data = await resp.json()
-      if (data && data.workspace) {
-        workspace = data.workspace
-        if (data.group) group = data.group
+
+      if (data.status === 'created' && data.session) {
+        const newSession = data.session
+        setSessions(prev => [newSession, ...prev])
+        setCurrentSessionId(newSession.id)
+        return newSession
       } else {
-        console.warn('create-workspace returned unexpected response, falling back to local workspace name')
+        console.error('Failed to create session:', data.message)
+        throw new Error(data.message || 'Failed to create session')
       }
     } catch (e) {
-      console.error('Failed to create workspace on server, using local fallback', e)
+      console.error('Failed to create session', e)
+      throw e
     }
-
-    const s = { id, name: sessionName, workspace, group, logs: [], createdAt: new Date().toISOString() }
-    const newList = [s, ...sessions]
-    saveSessions(newList)
-    setCurrentSessionId(id)
-    return s
   }
 
   const deleteSession = async (id: number) => {
-    const sessionToDelete = sessions.find(s => s.id === id)
+    try {
+      const resp = await fetch(`${API_URL}/api/sessions/${id}`, {
+        method: 'DELETE'
+      })
+      const data = await resp.json()
 
-    // Call backend to delete workspace
-    if (sessionToDelete) {
-      try {
-        const params = new URLSearchParams()
-        params.append('workspace', sessionToDelete.workspace)
-        if (sessionToDelete.group) params.append('group', sessionToDelete.group)
-
-        await fetch(`${API_URL}/api/delete-workspace?${params.toString()}`, {
-          method: 'DELETE'
-        })
-      } catch (e) {
-        console.error('Failed to delete workspace on server', e)
+      if (data.status === 'success') {
+        setSessions(prev => prev.filter(s => s.id !== id))
+        if (currentSessionId === id) setCurrentSessionId(null)
+      } else {
+        console.error('Failed to delete session:', data.message)
       }
+    } catch (e) {
+      console.error('Failed to delete session', e)
     }
-
-    const newList = sessions.filter(s => s.id !== id)
-    saveSessions(newList)
-    if (currentSessionId === id) setCurrentSessionId(null)
   }
 
   const saveSessionLogs = (id: number, logsToSave: any[]) => {
-    setSessions(prev => {
-      const newList = prev.map(s => s.id === id ? { ...s, logs: logsToSave } : s)
+    // Update local state immediately for responsiveness
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, logs: logsToSave } : s))
+
+    // Debounced save to backend (avoid too many API calls)
+    // Clear any pending save
+    if (saveLogsTimeoutRef.current) {
+      clearTimeout(saveLogsTimeoutRef.current)
+    }
+
+    // Schedule a save after 2 seconds of inactivity
+    saveLogsTimeoutRef.current = setTimeout(async () => {
       try {
-        window.localStorage.setItem(SESSIONS_KEY, JSON.stringify(newList))
-      } catch (e) { console.error(e) }
-      return newList
-    })
+        await fetch(`${API_URL}/api/sessions/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ logs: logsToSave })
+        })
+      } catch (e) {
+        console.error('Failed to save session logs to backend', e)
+      }
+    }, 2000)
   }
 
   const saveHistoryForWorkspace = (root: string, items: Array<any>) => {
@@ -271,6 +300,20 @@ const AgentConsole: React.FC = () => {
 
         // Clear live session tracking when run ends
         if (!data.is_running && liveSessionId) {
+          // Immediate save when run ends (bypass debounce)
+          if (saveLogsTimeoutRef.current) {
+            clearTimeout(saveLogsTimeoutRef.current)
+          }
+          // Force immediate save to backend
+          try {
+            await fetch(`${API_URL}/api/sessions/${liveSessionId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ logs: data.logs || [] })
+            })
+          } catch (e) {
+            console.error('Failed to save final logs to backend', e)
+          }
           setLiveSessionId(null)
         }
       } catch (error) {
@@ -542,66 +585,140 @@ const AgentConsole: React.FC = () => {
       <div className="console-main" style={{ flexDirection: 'row' }}>
         {/* Left Sidebar: Sessions/History */}
         {showHistory && (
-          <div className="history-panel sidebar-panel" style={{ width: '300px', borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)' }}>
-            <div className="panel-header" style={{ padding: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
-                <i className="fas fa-history"></i> Sessions
+          <div className="history-panel sidebar-panel" style={{ width: '320px', borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)' }}>
+            <div className="panel-header" style={{ padding: '18px 20px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <i className="fas fa-layer-group" style={{ fontSize: '14px' }}></i> Sessions
               </h3>
               <button
                 className="btn-text"
                 onClick={() => setShowHistory(false)}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <i className="fas fa-times"></i>
+                <i className="fas fa-times" style={{ fontSize: '12px' }}></i>
               </button>
             </div>
-            <div style={{ padding: '0 16px 16px', borderBottom: '1px solid var(--border-color)' }}>
-              <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={async () => {
+            <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)' }}>
+              <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px 20px', fontSize: '14px' }} onClick={async () => {
                 const name = window.prompt('Session name (optional):') || undefined
                 await createSession(name)
               }} title="New Session">
                 <i className="fas fa-plus"></i> New Session
               </button>
             </div>
-            <div className="history-panel-body" style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+            <div className="history-panel-body" style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
               {sessions.length === 0 ? (
-                <div style={{ padding: 16, color: 'var(--text-secondary)', textAlign: 'center' }}>No sessions yet.</div>
+                <div style={{ padding: '32px 16px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  <i className="fas fa-inbox" style={{ fontSize: '32px', marginBottom: '12px', display: 'block', opacity: 0.5 }}></i>
+                  <p style={{ margin: 0, fontSize: '14px' }}>No sessions yet</p>
+                </div>
               ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {sessions.map((s) => (
-                    <li key={s.id} className={`session-item ${currentSessionId === s.id ? 'active' : ''}`} style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid var(--border-color)',
-                      background: currentSessionId === s.id ? 'var(--bg-hover)' : 'transparent',
-                      cursor: 'pointer'
-                    }}>
-                      <div onClick={() => setCurrentSessionId(s.id)}>
-                        <div style={{ fontWeight: 600, color: currentSessionId === s.id ? 'var(--accent-color)' : 'var(--text-primary)' }}>{s.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                          {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString()}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {sessions.map((s, idx) => (
+                    <div
+                      key={s.id}
+                      className={`session-item ${currentSessionId === s.id ? 'active' : ''}`}
+                      onClick={() => setCurrentSessionId(s.id)}
+                      style={{
+                        padding: '14px 16px',
+                        background: currentSessionId === s.id ? 'var(--accent-subtle)' : 'var(--bg-card)',
+                        border: `1px solid ${currentSessionId === s.id ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '10px',
+                          background: currentSessionId === s.id
+                            ? 'var(--gradient-accent)'
+                            : `linear-gradient(135deg, ${['#60a5fa', '#4ade80', '#f472b6', '#a78bfa', '#fbbf24'][idx % 5]} 0%, ${['#818cf8', '#22d3ee', '#fb923c', '#ec4899', '#f97316'][idx % 5]} 100%)`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: 'var(--shadow-sm)'
+                        }}>
+                          <i className="fas fa-comments" style={{ color: 'white', fontSize: '16px' }}></i>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontWeight: 600,
+                            color: currentSessionId === s.id ? 'var(--accent-color)' : 'var(--text-primary)',
+                            fontSize: '14px',
+                            marginBottom: '4px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>{s.name}</div>
+                          <div style={{
+                            fontSize: '12px',
+                            color: 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <i className="fas fa-clock" style={{ fontSize: '10px' }}></i>
+                            {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button className="btn-xs" onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }} style={{ padding: '4px 8px', fontSize: '11px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--negative-color)' }}>
-                          <i className="fas fa-trash"></i>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '12px', marginLeft: '52px' }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            background: 'var(--negative-bg)',
+                            border: '1px solid transparent',
+                            borderRadius: '6px',
+                            color: 'var(--negative-color)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <i className="fas fa-trash" style={{ fontSize: '10px' }}></i> Delete
                         </button>
-                        <button className="btn-xs" onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const rootPath = s.group ? `${s.group}/${s.workspace}` : s.workspace
-                            const resp = await fetch(`${API_URL}/api/files?root=${encodeURIComponent(rootPath)}`)
-                            const data = await resp.json()
-                            if (data.files) {
-                              alert(`Files in ${rootPath}:\n${data.files.slice(0, 20).join('\n')}${data.files.length > 20 ? '...' : ''}`)
-                            }
-                          } catch (e) { alert('Failed to list files') }
-                        }} style={{ padding: '4px 8px', fontSize: '11px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-secondary)' }}>
-                          <i className="fas fa-folder"></i>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const rootPath = s.group ? `${s.group}/${s.workspace}` : s.workspace
+                              const resp = await fetch(`${API_URL}/api/files?root=${encodeURIComponent(rootPath)}`)
+                              const data = await resp.json()
+                              if (data.files) {
+                                alert(`Files in ${rootPath}:\n${data.files.slice(0, 20).join('\n')}${data.files.length > 20 ? '...' : ''}`)
+                              }
+                            } catch (e) { alert('Failed to list files') }
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <i className="fas fa-folder-open" style={{ fontSize: '10px' }}></i> Files
                         </button>
                       </div>
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           </div>
@@ -609,7 +726,13 @@ const AgentConsole: React.FC = () => {
 
         {/* Center: Chat */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-          {hasStarted && <ProgressBar logs={status.logs} config={config} />}
+          {/* Progress bar now uses session-specific logs */}
+          {(hasStarted || (currentSessionId && sessions.find(s => s.id === currentSessionId)?.logs?.length > 0)) && (
+            <ProgressBar
+              logs={currentSessionId ? (sessions.find(s => s.id === currentSessionId)?.logs || []) : status.logs}
+              config={config}
+            />
+          )}
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <ChatInterface
               logs={currentSessionId ? (sessions.find(s => s.id === currentSessionId)?.logs || []) : status.logs}
@@ -626,20 +749,20 @@ const AgentConsole: React.FC = () => {
 
         {/* Right Sidebar: Files */}
         {showFiles && (
-          <div className="files-panel sidebar-panel" style={{ width: '320px', borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)' }}>
-            <div className="panel-header" style={{ padding: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
-                <i className="fas fa-folder-open"></i> Workspace
+          <div className="files-panel sidebar-panel" style={{ width: '360px', borderLeft: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)' }}>
+            <div className="panel-header" style={{ padding: '18px 20px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <i className="fas fa-folder-open" style={{ fontSize: '14px' }}></i> Workspace Files
               </h3>
               <button
                 className="btn-text"
                 onClick={() => setShowFiles(false)}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
-                <i className="fas fa-times"></i>
+                <i className="fas fa-times" style={{ fontSize: '12px' }}></i>
               </button>
             </div>
-            <div className="files-panel-body" style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+            <div className="files-panel-body" style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
               <FileManager isRunning={status.is_running} currentWorkspaceRoot={
                 (() => {
                   if (currentSessionId && workspaceRoot) {

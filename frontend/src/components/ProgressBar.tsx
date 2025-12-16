@@ -98,7 +98,13 @@ const ProgressBar: React.FC<ProgressBarProps> = ({ logs, config }) => {
           <React.Fragment key={step.id}>
             <div className={`progress-step progress-step-${step.status}`}>
               <div className="progress-step-icon">
-                <i className={`fas ${step.icon}`}></i>
+                {step.status === 'completed' ? (
+                  <i className="fas fa-check"></i>
+                ) : step.status === 'error' ? (
+                  <i className="fas fa-times"></i>
+                ) : (
+                  <i className={`fas ${step.icon}`}></i>
+                )}
               </div>
               <div className="progress-step-label">{step.label}</div>
               {step.status === 'active' && (
@@ -119,3 +125,4 @@ const ProgressBar: React.FC<ProgressBarProps> = ({ logs, config }) => {
 }
 
 export default ProgressBar
+

@@ -653,23 +653,112 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className="chat-messages" ref={messagesContainerRef}>
         {messages.length === 0 ? (
           <div className="chat-welcome">
-            <i className="fas fa-robot"></i>
-            <h2>Welcome to AutoDS Agent</h2>
-            <p>I'm your AI-powered data science assistant. Describe what you'd like to accomplish, and I'll help you every step of the way.</p>
+            <div style={{
+              width: '88px',
+              height: '88px',
+              borderRadius: '24px',
+              background: 'var(--gradient-accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '28px',
+              boxShadow: 'var(--shadow-lg), var(--shadow-glow)',
+              animation: 'float 4s ease-in-out infinite'
+            }}>
+              <i className="fas fa-robot" style={{ fontSize: '40px', color: 'white' }}></i>
+            </div>
+            <h2 style={{
+              background: 'linear-gradient(135deg, var(--text-title) 0%, var(--accent-color) 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>Welcome to AutoDS Agent</h2>
+            <p>I'm your AI-powered data science assistant. Describe your task and I'll handle the research, planning, and execution for you.</p>
             <div className="chat-examples">
-              <p><strong>Try asking me to:</strong></p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                <i className="fas fa-lightbulb" style={{ color: 'var(--warning-color)' }}></i>
+                <strong>Try asking me to:</strong>
+              </p>
               <div className="example-chips">
                 <button onClick={() => setInputValue("Analyze customer data and create clustering visualizations")}>
-                  📊 Analyze & Cluster Data
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #60a5fa 0%, #818cf8 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <i className="fas fa-chart-pie" style={{ color: 'white', fontSize: '16px' }}></i>
+                    </span>
+                    <span>
+                      <strong style={{ display: 'block', marginBottom: '2px' }}>Analyze & Cluster Data</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Segment customers with ML</span>
+                    </span>
+                  </span>
                 </button>
                 <button onClick={() => setInputValue("Train a prediction model on sales dataset")}>
-                  🤖 Train ML Model
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #4ade80 0%, #22d3ee 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <i className="fas fa-brain" style={{ color: 'white', fontSize: '16px' }}></i>
+                    </span>
+                    <span>
+                      <strong style={{ display: 'block', marginBottom: '2px' }}>Train ML Model</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Build predictive models</span>
+                    </span>
+                  </span>
                 </button>
                 <button onClick={() => setInputValue("Generate comprehensive EDA report with visualizations")}>
-                  📈 Generate EDA Report
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #f472b6 0%, #fb923c 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <i className="fas fa-chart-line" style={{ color: 'white', fontSize: '16px' }}></i>
+                    </span>
+                    <span>
+                      <strong style={{ display: 'block', marginBottom: '2px' }}>Generate EDA Report</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Comprehensive data insights</span>
+                    </span>
+                  </span>
                 </button>
                 <button onClick={() => setInputValue("Research latest trends in quantum computing")}>
-                  🔬 Research Topics
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <i className="fas fa-microscope" style={{ color: 'white', fontSize: '16px' }}></i>
+                    </span>
+                    <span>
+                      <strong style={{ display: 'block', marginBottom: '2px' }}>Research Topics</strong>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Deep dive into any subject</span>
+                    </span>
+                  </span>
                 </button>
               </div>
             </div>
@@ -755,7 +844,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </>
         ) : (
           <>
-            {/* Normal Input Mode */}
+            {/* Normal Input Mode - Enhanced Design */}
             {/* Hidden file input */}
             <input
               ref={fileInputRef}
@@ -764,46 +853,128 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               onChange={handleFileSelect}
               disabled={isAgentRunning || isUploading}
             />
-            <button
-              className="chat-settings-button"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
-            >
-              <i className="fas fa-cog"></i>
-            </button>
-            <button
-              className="chat-settings-button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Upload file to workspace"
-              disabled={isAgentRunning || isUploading}
-              style={{ opacity: isAgentRunning ? 0.5 : 1 }}
-            >
-              {isUploading ? (
-                <i className="fas fa-spinner fa-spin"></i>
-              ) : (
-                <i className="fas fa-paperclip"></i>
-              )}
-            </button>
-            <textarea
-              className="chat-input"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
-              placeholder={waitingForInput ? inputPrompt || "Agent is waiting for your input..." : "Describe your task or ask a question..."}
-              rows={2}
-            />
-            <button
-              className="chat-send-button"
-              onClick={handleSend}
-              disabled={!inputValue.trim()}
-            >
-              <i className="fas fa-paper-plane"></i>
-            </button>
+
+            {/* Input Container */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: '12px',
+              padding: '12px 16px',
+              background: 'transparent',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-color)',
+              transition: 'all 0.2s ease',
+              position: 'relative'
+            }}>
+              {/* Left Actions */}
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignSelf: 'flex-end', paddingBottom: '2px' }}>
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  title="Settings"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: 'var(--radius-md)',
+                    background: showSettings ? 'var(--accent-subtle)' : 'transparent',
+                    border: showSettings ? '1px solid var(--accent-color)' : '1px solid transparent',
+                    color: showSettings ? 'var(--accent-color)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '15px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <i className="fas fa-cog"></i>
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Upload file to workspace"
+                  disabled={isAgentRunning || isUploading}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'transparent',
+                    border: '1px solid transparent',
+                    color: isAgentRunning ? 'var(--text-muted)' : 'var(--text-secondary)',
+                    cursor: isAgentRunning ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '15px',
+                    transition: 'all 0.2s ease',
+                    opacity: isAgentRunning ? 0.5 : 1
+                  }}
+                >
+                  {isUploading ? (
+                    <i className="fas fa-spinner fa-spin"></i>
+                  ) : (
+                    <i className="fas fa-paperclip"></i>
+                  )}
+                </button>
+              </div>
+
+              {/* Text Input */}
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+                placeholder={waitingForInput ? inputPrompt || "Agent is waiting for your input..." : "Describe your task or ask a question..."}
+                rows={1}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '15px',
+                  lineHeight: '1.5',
+                  fontFamily: 'var(--font-sans)',
+                  padding: '8px 0',
+                  minHeight: '24px',
+                  maxHeight: '120px',
+                  overflow: 'auto'
+                }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = 'auto'
+                  target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+                }}
+              />
+
+              {/* Send Button */}
+              <button
+                onClick={handleSend}
+                disabled={!inputValue.trim()}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: 'var(--radius-md)',
+                  background: inputValue.trim() ? 'var(--gradient-accent)' : 'var(--bg-elevated)',
+                  border: 'none',
+                  color: inputValue.trim() ? 'white' : 'var(--text-muted)',
+                  cursor: inputValue.trim() ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '16px',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0,
+                  boxShadow: inputValue.trim() ? 'var(--shadow-sm)' : 'none'
+                }}
+              >
+                <i className="fas fa-arrow-up"></i>
+              </button>
+            </div>
           </>
         )}
       </div>

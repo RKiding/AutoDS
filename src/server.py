@@ -9,9 +9,13 @@ import os
 import sys
 import uuid
 import hashlib
+import json
 
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Session storage file path
+SESSIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions.json')
 
 from src.main import AgentSystem
 
@@ -86,7 +90,31 @@ def input_callback(prompt):
             session.waiting_for_input = False
     return session.user_input
 
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Any
+
+# ==================== Session Persistence ====================
+
+def load_sessions() -> List[Dict[str, Any]]:
+    """Load sessions from JSON file"""
+    try:
+        if os.path.exists(SESSIONS_FILE):
+            with open(SESSIONS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"⚠️ Failed to load sessions: {e}")
+    return []
+
+def save_sessions(sessions_list: List[Dict[str, Any]]) -> bool:
+    """Save sessions to JSON file"""
+    try:
+        with open(SESSIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(sessions_list, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed to save sessions: {e}")
+        return False
+
+# ==================== Pydantic Models ====================
 
 class GoalRequest(BaseModel):
     goal: str
@@ -95,6 +123,13 @@ class GoalRequest(BaseModel):
 
 class InputRequest(BaseModel):
     text: str
+
+class SessionCreate(BaseModel):
+    name: Optional[str] = None
+
+class SessionUpdate(BaseModel):
+    name: Optional[str] = None
+    logs: Optional[List[Dict[str, Any]]] = None
 
 def run_agent_task(goal: str, workspace_root: str = None, config_overrides: dict = None):
     session.is_running = True
@@ -528,6 +563,163 @@ def delete_workspace(workspace: str, group: str = None):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ==================== Session Management API ====================
+
+@app.get("/api/sessions")
+def list_sessions():
+    """List all sessions"""
+    sessions_list = load_sessions()
+    return {"sessions": sessions_list}
+
+@app.post("/api/sessions")
+def create_session_api(req: SessionCreate = None):
+    """Create a new session and corresponding workspace"""
+    sessions_list = load_sessions()
+    
+    session_id = int(time.time() * 1000)  # Use timestamp as ID
+    session_name = req.name if req and req.name else f"Session {len(sessions_list) + 1}"
+    
+    # Create workspace for this session
+    SESSION_GROUP = 'workspacea'
+    base = session.workspace_root
+    
+    # Sanitize group
+    group = os.path.normpath(SESSION_GROUP).replace('..', '')
+    if os.path.isabs(group):
+        group = os.path.basename(group)
+    base_with_group = os.path.join(base, group)
+    os.makedirs(base_with_group, exist_ok=True)
+    
+    # Generate unique workspace name
+    raw = f"{uuid.uuid4().hex}-{time.time()}"
+    workspace_name = hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]
+    target = os.path.join(base_with_group, workspace_name)
+    
+    try:
+        os.makedirs(target, exist_ok=True)
+        # Create placeholder README
+        readme = os.path.join(target, 'README.md')
+        if not os.path.exists(readme):
+            with open(readme, 'w', encoding='utf-8') as f:
+                f.write(f"# Workspace {workspace_name}\n\nCreated at {time.ctime()}")
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to create workspace: {e}"}
+    
+    # Create session object
+    new_session = {
+        "id": session_id,
+        "name": session_name,
+        "workspace": workspace_name,
+        "group": group,
+        "logs": [],
+        "createdAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime()),
+        "updatedAt": time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())
+    }
+    
+    # Add to list (newest first)
+    sessions_list.insert(0, new_session)
+    
+    if save_sessions(sessions_list):
+        return {"status": "created", "session": new_session}
+    else:
+        return {"status": "error", "message": "Failed to save session"}
+
+@app.get("/api/sessions/{session_id}")
+def get_session(session_id: int):
+    """Get a specific session by ID"""
+    sessions_list = load_sessions()
+    for s in sessions_list:
+        if s.get("id") == session_id:
+            return {"status": "success", "session": s}
+    return {"status": "error", "message": "Session not found"}
+
+@app.put("/api/sessions/{session_id}")
+def update_session(session_id: int, req: SessionUpdate):
+    """Update a session (name or logs)"""
+    sessions_list = load_sessions()
+    
+    for i, s in enumerate(sessions_list):
+        if s.get("id") == session_id:
+            if req.name is not None:
+                sessions_list[i]["name"] = req.name
+            if req.logs is not None:
+                sessions_list[i]["logs"] = req.logs
+            sessions_list[i]["updatedAt"] = time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())
+            
+            if save_sessions(sessions_list):
+                return {"status": "success", "session": sessions_list[i]}
+            else:
+                return {"status": "error", "message": "Failed to save session"}
+    
+    return {"status": "error", "message": "Session not found"}
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session_api(session_id: int):
+    """Delete a session and its workspace"""
+    if session.is_running:
+        return {"status": "error", "message": "Cannot delete session while agent is running"}
+    
+    sessions_list = load_sessions()
+    session_to_delete = None
+    
+    for s in sessions_list:
+        if s.get("id") == session_id:
+            session_to_delete = s
+            break
+    
+    if not session_to_delete:
+        return {"status": "error", "message": "Session not found"}
+    
+    # Delete workspace
+    workspace = session_to_delete.get("workspace", "")
+    group = session_to_delete.get("group", "")
+    
+    base = session.workspace_root
+    if group:
+        group = os.path.normpath(group).replace('..', '')
+        if os.path.isabs(group):
+            group = os.path.basename(group)
+        base = os.path.join(base, group)
+    
+    workspace = os.path.normpath(workspace).replace('..', '')
+    if os.path.isabs(workspace):
+        workspace = os.path.basename(workspace)
+    
+    target = os.path.join(base, workspace)
+    
+    try:
+        import shutil
+        if os.path.exists(target) and target.startswith(session.workspace_root):
+            shutil.rmtree(target)
+    except Exception as e:
+        print(f"⚠️ Failed to delete workspace: {e}")
+    
+    # Remove from sessions list
+    sessions_list = [s for s in sessions_list if s.get("id") != session_id]
+    
+    if save_sessions(sessions_list):
+        return {"status": "success", "message": f"Session {session_id} deleted"}
+    else:
+        return {"status": "error", "message": "Failed to save sessions after deletion"}
+
+@app.post("/api/sessions/{session_id}/logs")
+def update_session_logs(session_id: int, logs: List[Dict[str, Any]]):
+    """Update session logs (optimized endpoint for log updates)"""
+    sessions_list = load_sessions()
+    
+    for i, s in enumerate(sessions_list):
+        if s.get("id") == session_id:
+            sessions_list[i]["logs"] = logs
+            sessions_list[i]["updatedAt"] = time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime())
+            
+            if save_sessions(sessions_list):
+                return {"status": "success"}
+            else:
+                return {"status": "error", "message": "Failed to save logs"}
+    
+    return {"status": "error", "message": "Session not found"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

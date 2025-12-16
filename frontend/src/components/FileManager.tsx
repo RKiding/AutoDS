@@ -230,52 +230,92 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
     return { folderMap, rootFiles }
   }
 
+  // Get appropriate icon for file type
+  const getFileIcon = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+    const iconMap: { [key: string]: { icon: string; color: string } } = {
+      'py': { icon: 'fa-python', color: '#3776ab' },
+      'js': { icon: 'fa-js', color: '#f7df1e' },
+      'ts': { icon: 'fa-code', color: '#3178c6' },
+      'tsx': { icon: 'fa-react', color: '#61dafb' },
+      'jsx': { icon: 'fa-react', color: '#61dafb' },
+      'html': { icon: 'fa-html5', color: '#e34f26' },
+      'css': { icon: 'fa-css3-alt', color: '#1572b6' },
+      'json': { icon: 'fa-file-code', color: '#f5a623' },
+      'md': { icon: 'fa-markdown', color: '#083fa1' },
+      'txt': { icon: 'fa-file-lines', color: '#6b7280' },
+      'csv': { icon: 'fa-file-csv', color: '#22c55e' },
+      'xlsx': { icon: 'fa-file-excel', color: '#217346' },
+      'xls': { icon: 'fa-file-excel', color: '#217346' },
+      'pdf': { icon: 'fa-file-pdf', color: '#dc2626' },
+      'png': { icon: 'fa-file-image', color: '#8b5cf6' },
+      'jpg': { icon: 'fa-file-image', color: '#8b5cf6' },
+      'jpeg': { icon: 'fa-file-image', color: '#8b5cf6' },
+      'gif': { icon: 'fa-file-image', color: '#8b5cf6' },
+      'svg': { icon: 'fa-file-image', color: '#f472b6' },
+      'zip': { icon: 'fa-file-zipper', color: '#f59e0b' },
+      'tar': { icon: 'fa-file-zipper', color: '#f59e0b' },
+      'gz': { icon: 'fa-file-zipper', color: '#f59e0b' },
+    }
+    return iconMap[ext] || { icon: 'fa-file', color: 'var(--text-secondary)' }
+  }
+
   const { folderMap, rootFiles } = organizeFilesByFolder(files)
 
   return (
-    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflow: 'hidden' }}>
       {/* Workspace Info - Collapsed by default */}
       <div style={{
-        background: 'var(--bg-panel)',
+        background: 'var(--bg-card)',
         border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        overflow: 'hidden'
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
+        transition: 'all 0.2s ease'
       }}>
         <div
           style={{
-            padding: '12px 16px',
+            padding: '14px 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'pointer',
-            backgroundColor: 'var(--bg-hover)',
+            background: expandInfo ? 'var(--bg-hover)' : 'transparent',
             transition: 'background 0.2s'
           }}
           onClick={() => setExpandInfo(!expandInfo)}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className={`fas fa-chevron-${expandInfo ? 'down' : 'right'}`}></i>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <i className={`fas fa-chevron-${expandInfo ? 'down' : 'right'}`} style={{ fontSize: '10px', color: 'var(--accent-color)' }}></i>
+            <i className="fas fa-info-circle" style={{ color: 'var(--info-color)', fontSize: '14px' }}></i>
             <span style={{ fontSize: '13px', fontWeight: 600 }}>Workspace Info</span>
           </div>
           {workspaceInfo && (
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <span style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              background: 'var(--bg-elevated)',
+              padding: '4px 8px',
+              borderRadius: 'var(--radius-full)'
+            }}>
               {workspaceInfo.file_count} files
             </span>
           )}
         </div>
 
         {expandInfo && workspaceInfo && (
-          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)', fontSize: '13px' }}>
-            <div style={{ marginBottom: '8px' }}>
-              <div style={{ color: 'var(--text-secondary)', marginBottom: '2px' }}>Root:</div>
-              <div style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>
-                {workspaceInfo.workspace_root.split('/').pop()}
+          <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border-color)', fontSize: '13px' }}>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Root</div>
+                <div style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                  {workspaceInfo.workspace_root.split('/').pop()}
+                </div>
               </div>
-            </div>
-            <div style={{ marginBottom: '8px' }}>
-              <div style={{ color: 'var(--text-secondary)', marginBottom: '2px' }}>Total Size:</div>
-              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                {formatSize(workspaceInfo.total_size)}
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Size</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {formatSize(workspaceInfo.total_size)}
+                </div>
               </div>
             </div>
           </div>
@@ -284,61 +324,85 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
 
       {/* Upload Controls - Collapsed by default */}
       <div style={{
-        background: 'var(--bg-panel)',
+        background: 'var(--bg-card)',
         border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        overflow: 'hidden'
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
+        transition: 'all 0.2s ease'
       }}>
         <div
           style={{
-            padding: '12px 16px',
+            padding: '14px 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'pointer',
-            backgroundColor: 'var(--bg-hover)',
+            background: expandUpload ? 'var(--bg-hover)' : 'transparent',
             transition: 'background 0.2s'
           }}
           onClick={() => setExpandUpload(!expandUpload)}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <i className={`fas fa-chevron-${expandUpload ? 'down' : 'right'}`}></i>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <i className={`fas fa-chevron-${expandUpload ? 'down' : 'right'}`} style={{ fontSize: '10px', color: 'var(--accent-color)' }}></i>
+            <i className="fas fa-cloud-arrow-up" style={{ color: 'var(--positive-color)', fontSize: '14px' }}></i>
             <span style={{ fontSize: '13px', fontWeight: 600 }}>Upload & Manage</span>
           </div>
         </div>
 
         {expandUpload && (
           <div style={{
-            padding: '12px 16px',
+            padding: '14px 16px',
             borderTop: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '10px'
           }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileSelect}
-              disabled={isRunning}
-              style={{ fontSize: '12px' }}
-            />
+            <div style={{
+              border: '2px dashed var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              background: selectedFile ? 'var(--accent-subtle)' : 'transparent'
+            }} onClick={() => fileInputRef.current?.click()}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                disabled={isRunning}
+                style={{ display: 'none' }}
+              />
+              {selectedFile ? (
+                <div>
+                  <i className="fas fa-file-check" style={{ fontSize: '24px', color: 'var(--positive-color)', marginBottom: '8px', display: 'block' }}></i>
+                  <div style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>{selectedFile.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Click to change file</div>
+                </div>
+              ) : (
+                <div>
+                  <i className="fas fa-cloud-arrow-up" style={{ fontSize: '24px', color: 'var(--text-muted)', marginBottom: '8px', display: 'block' }}></i>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Click to select file</div>
+                </div>
+              )}
+            </div>
             {selectedFile && (
               <button
                 className="btn-primary"
                 onClick={handleUpload}
                 disabled={isRunning}
-                style={{ width: '100%', padding: '8px 12px', fontSize: '12px' }}
+                style={{ width: '100%', padding: '10px 16px', fontSize: '13px' }}
               >
-                <i className="fas fa-upload"></i> Upload {selectedFile.name.substring(0, 20)}
+                <i className="fas fa-upload" style={{ marginRight: '8px' }}></i> Upload File
               </button>
             )}
             <button
-              className="btn-danger"
+              className="btn-secondary"
               onClick={handleClearWorkspace}
               disabled={isRunning}
-              style={{ width: '100%', padding: '8px 12px', fontSize: '12px' }}
+              style={{ width: '100%', padding: '10px 16px', fontSize: '13px', color: 'var(--negative-color)' }}
             >
-              <i className="fas fa-trash-alt"></i> Clear Workspace
+              <i className="fas fa-trash-alt" style={{ marginRight: '8px' }}></i> Clear Workspace
             </button>
           </div>
         )}
@@ -346,92 +410,108 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
 
       {/* File List */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: '13px', fontWeight: 600, padding: '8px 0', color: 'var(--text-primary)' }}>
-          <i className="fas fa-file"></i> Files
+        <div style={{
+          fontSize: '13px',
+          fontWeight: 600,
+          padding: '10px 0',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <i className="fas fa-folder-tree" style={{ color: 'var(--accent-color)' }}></i> Files
         </div>
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', minHeight: 0 }}>
+        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
           {files.length === 0 ? (
             <div style={{
               textAlign: 'center',
-              padding: '20px',
-              color: 'var(--text-secondary)',
-              fontSize: '12px'
+              padding: '32px 20px',
+              color: 'var(--text-muted)',
+              fontSize: '13px'
             }}>
-              <i className="fas fa-folder" style={{ display: 'block', fontSize: '20px', marginBottom: '8px', opacity: 0.5 }}></i>
-              No files
+              <i className="fas fa-folder-open" style={{ display: 'block', fontSize: '32px', marginBottom: '12px', opacity: 0.4 }}></i>
+              No files yet
             </div>
           ) : (
             <>
               {/* Root level files */}
-              {rootFiles.map((file, idx) => (
-                <div key={`root-${idx}`} style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-panel)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '8px',
-                  fontSize: '12px'
-                }}>
-                  <span style={{
-                    flex: 1,
-                    color: 'var(--text-primary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }} title={file}>
-                    <i className="fas fa-file"></i> {file}
-                  </span>
-                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => handlePreview(file)}
-                      style={{
-                        background: 'var(--bg-hover)',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-primary)',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '11px'
-                      }}
-                    >
-                      <i className="fas fa-eye"></i>
-                    </button>
-                    <button
-                      onClick={() => handleDownload(file)}
-                      style={{
-                        background: 'var(--bg-hover)',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-primary)',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '11px'
-                      }}
-                    >
-                      <i className="fas fa-download"></i>
-                    </button>
-                    <button
-                      onClick={() => handleDelete(file)}
-                      disabled={isRunning}
-                      style={{
-                        background: isRunning ? 'var(--bg-hover)' : 'var(--negative-color)',
-                        border: '1px solid var(--border-color)',
-                        color: isRunning ? 'var(--text-secondary)' : 'white',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: isRunning ? 'not-allowed' : 'pointer',
-                        fontSize: '11px',
-                        opacity: isRunning ? 0.5 : 1
-                      }}
-                    >
-                      <i className="fas fa-trash"></i>
-                    </button>
+              {rootFiles.map((file, idx) => {
+                const fileIcon = getFileIcon(file)
+                return (
+                  <div key={`root-${idx}`} style={{
+                    padding: '10px 14px',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    fontSize: '13px',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <span style={{
+                      flex: 1,
+                      color: 'var(--text-primary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }} title={file}>
+                      <i className={`fas ${fileIcon.icon}`} style={{ color: fileIcon.color, fontSize: '14px' }}></i>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{file}</span>
+                    </span>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => handlePreview(file)}
+                        style={{
+                          background: 'var(--bg-hover)',
+                          border: '1px solid var(--border-color)',
+                          color: 'var(--text-primary)',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '11px'
+                        }}
+                      >
+                        <i className="fas fa-eye"></i>
+                      </button>
+                      <button
+                        onClick={() => handleDownload(file)}
+                        style={{
+                          background: 'var(--bg-hover)',
+                          border: '1px solid var(--border-color)',
+                          color: 'var(--text-primary)',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '11px'
+                        }}
+                      >
+                        <i className="fas fa-download"></i>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(file)}
+                        disabled={isRunning}
+                        style={{
+                          background: isRunning ? 'var(--bg-hover)' : 'var(--negative-color)',
+                          border: '1px solid var(--border-color)',
+                          color: isRunning ? 'var(--text-secondary)' : 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: isRunning ? 'not-allowed' : 'pointer',
+                          fontSize: '11px',
+                          opacity: isRunning ? 0.5 : 1
+                        }}
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
 
               {/* Folders with collapsible items */}
               {Object.entries(folderMap).map(([folder, folderFiles]) => (
