@@ -1,6 +1,7 @@
 import React from 'react'
 import API_URL from '../config/api'
 import MarkdownViewer from './MarkdownViewer'
+import ImagePreview from './ImagePreview'
 
 interface FileManagerProps {
   isRunning: boolean
@@ -21,6 +22,8 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
   const [expandUpload, setExpandUpload] = React.useState(false)
   const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(new Set())
   const [mdPreviewFile, setMdPreviewFile] = React.useState<string | null>(null)
+  const [imagePreviewSrc, setImagePreviewSrc] = React.useState<string | null>(null)
+  const [imagePreviewName, setImagePreviewName] = React.useState<string | undefined>(undefined)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadFiles = async () => {
@@ -103,9 +106,26 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
 
   const handlePreview = async (path: string) => {
     // Check if file is markdown
-    if (path.endsWith('.md') || path.endsWith('.markdown')) {
+    const lower = path.toLowerCase()
+    // Treat plain text files as markdown-style previews
+    if (lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.txt')) {
       setMdPreviewFile(path)
     } else {
+      // If image file, open image preview modal
+      const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']
+      if (imageExts.some(ext => lower.endsWith(ext))) {
+        try {
+          let url = `${API_URL}/api/download-file?path=${encodeURIComponent(path)}`
+          if (currentWorkspaceRoot) {
+            url += `&root=${encodeURIComponent(currentWorkspaceRoot)}`
+          }
+          setImagePreviewSrc(url)
+          setImagePreviewName(path.split('/').pop())
+          return
+        } catch (e) {
+          console.error('Error preparing image preview:', e)
+        }
+      }
       // Default preview for other files
       try {
         let url = `${API_URL}/api/file-preview?path=${encodeURIComponent(path)}`
@@ -528,6 +548,14 @@ const FileManager: React.FC<FileManagerProps> = ({ isRunning, currentWorkspaceRo
         <MarkdownViewer
           filePath={mdPreviewFile}
           onClose={() => setMdPreviewFile(null)}
+        />
+      )}
+      {/* Image Preview Modal */}
+      {imagePreviewSrc && (
+        <ImagePreview
+          src={imagePreviewSrc}
+          name={imagePreviewName}
+          onClose={() => { setImagePreviewSrc(null); setImagePreviewName(undefined) }}
         />
       )}
     </div>

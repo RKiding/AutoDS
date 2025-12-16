@@ -5,6 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import API_URL from '../config/api'
+import ImagePreview from './ImagePreview'
 
 interface MarkdownViewerProps {
   filePath: string
@@ -15,6 +16,8 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
   const [content, setContent] = React.useState<string>('')
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [imagePreviewSrc, setImagePreviewSrc] = React.useState<string | null>(null)
+  const [imagePreviewAlt, setImagePreviewAlt] = React.useState<string | undefined>(undefined)
 
   React.useEffect(() => {
     loadMarkdown()
@@ -38,6 +41,20 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
     }
   }
 
+  const openImagePreview = (src?: string, alt?: string) => {
+    if (!src) return
+    // If absolute URL or data URI, use directly
+    if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('/')) {
+      setImagePreviewSrc(src)
+      setImagePreviewAlt(alt)
+      return
+    }
+    // Otherwise assume it's a workspace-relative path and use download endpoint
+    const url = `${API_URL}/api/download-file?path=${encodeURIComponent(src)}`
+    setImagePreviewSrc(url)
+    setImagePreviewAlt(alt)
+  }
+
   return (
     <div style={{
       position: 'fixed',
@@ -45,7 +62,7 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.5)',
+      background: 'rgba(0, 0, 0, 0.75)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -53,7 +70,7 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
       padding: '20px'
     }}>
       <div style={{
-        background: 'var(--bg-primary)',
+        background: 'var(--bg-panel)',
         borderRadius: '12px',
         boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
         display: 'flex',
@@ -333,14 +350,19 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
                       cursor: 'pointer'
                     }} {...props} />
                   ),
-                  img: ({ ...props }) => (
-                    <img style={{
-                      maxWidth: '100%',
-                      height: 'auto',
-                      marginBottom: '12px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)'
-                    }} {...props} />
+                  img: ({ ...props }: any) => (
+                    <img
+                      onClick={() => openImagePreview(props.src, props.alt)}
+                      style={{
+                        maxWidth: '100%',
+                        height: 'auto',
+                        marginBottom: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        cursor: 'pointer'
+                      }}
+                      {...props}
+                    />
                   ),
                   hr: ({ ...props }) => (
                     <hr style={{
@@ -353,6 +375,9 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ filePath, onClose }) =>
               >
                 {content}
               </ReactMarkdown>
+              {imagePreviewSrc && (
+                <ImagePreview src={imagePreviewSrc} alt={imagePreviewAlt} onClose={() => setImagePreviewSrc(null)} />
+              )}
             </div>
           )}
         </div>
