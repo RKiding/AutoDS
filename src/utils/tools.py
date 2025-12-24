@@ -9,8 +9,10 @@ from typing import Optional, Union, List, Any, Dict
 
 try:
     from agno.tools.duckduckgo import DuckDuckGoTools
+    from agno.tools.baidusearch import BaiduSearchTools
 except ImportError:
     DuckDuckGoTools = None
+    BaiduSearchTools = None
 
 # Keywords that indicate public opinion/sentiment related queries
 OPINION_KEYWORDS = [
@@ -212,24 +214,40 @@ class WorkspaceTools:
 class SearchWrapper:
     def __init__(self, workspace_tools: WorkspaceTools):
         self.workspace_tools = workspace_tools
-        if DuckDuckGoTools:
-            self.search_tool = DuckDuckGoTools()
-        else:
-            self.search_tool = None
+        self.ddg_tool = DuckDuckGoTools() if DuckDuckGoTools else None
+        self.baidu_tool = BaiduSearchTools() if BaiduSearchTools else None
 
-    def search_and_save(self, query, logger=None) -> str:
+    def search_and_save(self, query: str) -> str:
         """
         Searches the web using DuckDuckGo and saves the raw results to a file.
+        Use this for general English or international queries.
         
         Args:
-            query: A string or list of strings to search for
-        
+            query (str): The search query.
+            
         Returns:
-            Search results as a string
+            str: Search results and the filename where they are saved.
         """
-        if not self.search_tool:
+        if not self.ddg_tool:
             return "Error: DuckDuckGoTools not available."
+        return self._perform_search(self.ddg_tool.duckduckgo_search, "ddg", query)
 
+    def search_baidu_and_save(self, query: str) -> str:
+        """
+        Searches the web using Baidu and saves the raw results to a file.
+        Use this for Chinese-specific queries or when looking for information in China.
+        
+        Args:
+            query (str): The search query in Chinese.
+            
+        Returns:
+            str: Search results and the filename where they are saved.
+        """
+        if not self.baidu_tool:
+            return "Error: BaiduSearchTools not available."
+        return self._perform_search(self.baidu_tool.baidu_search, "baidu", query)
+
+    def _perform_search(self, search_func, engine_name, query) -> str:
         # Handle both string and list inputs
         queries = query if isinstance(query, list) else [query]
         
@@ -240,74 +258,55 @@ class SearchWrapper:
         for idx, q in enumerate(queries):
             # Add delay between requests to avoid rate limiting
             if idx > 0:
-                wait_time = 2  # Wait 2 seconds between requests
-                msg = f"Waiting {wait_time}s before next search to avoid rate limiting..."
-                if logger: logger(msg)
-                else: print(msg)
+                wait_time = 2
+                print(f"Waiting {wait_time}s before next search...")
                 time.sleep(wait_time)
             
-            # Retry logic for handling temporary failures
             max_retries = 3
             retry_count = 0
             success = False
             
             while retry_count < max_retries and not success:
                 try:
-                    msg = f"Searching for: '{q}' (attempt {retry_count + 1}/{max_retries})"
-                    if logger: logger(msg)
-                    else: print(msg)
-                    results = self.search_tool.duckduckgo_search(q)
-                    all_results.append(f"=== Results for '{q}' ===\n{results}\n")
+                    print(f"Searching {engine_name} for: '{q}' (attempt {retry_count + 1}/{max_retries})")
+                    
+                    results = search_func(q)
+                    all_results.append(f"=== {engine_name.upper()} Results for '{q}' ===\n{results}\n")
                     
                     # Create filename
                     sanitized_query = "".join(c for c in q if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')[:30]
-                    filename = f"tmp/search_{sanitized_query}_{int(time.time())}.txt"
+                    filename = f"tmp/search_{engine_name}_{sanitized_query}_{int(time.time())}.txt"
                     
                     # Save to workspace
                     self.workspace_tools.save_file(filename, str(results))
                     all_filenames.append(filename)
                     success = True
-                    msg = f"✓ Search successful for '{q}'"
-                    if logger: logger(msg)
-                    else: print(msg)
+                    print(f"✓ {engine_name.upper()} Search successful for '{q}'")
                     
                 except Exception as e:
                     retry_count += 1
                     error_str = str(e).lower()
-                    
-                    # Check if it's a rate limiting error
                     is_rate_limit = any(keyword in error_str for keyword in ['rate', 'timeout', 'connection', 'no results'])
                     
                     if is_rate_limit and retry_count < max_retries:
-                        # Exponential backoff for rate limiting
-                        wait_time = 3 ** retry_count  # 3s, 9s, 27s
-                        # Exponential backoff for rate limiting
-                        wait_time = 3 ** retry_count  # 3s, 9s, 27s
-                        msg = f"⚠️  Rate limit/timeout detected. Waiting {wait_time}s before retry..."
-                        if logger: logger(msg)
-                        else: print(msg)
+                        wait_time = 3 ** retry_count
+                        print(f"⚠️  Rate limit/timeout. Waiting {wait_time}s...")
                         time.sleep(wait_time)
                     else:
-                        # Non-retryable error or max retries reached
-                        error_msg = f"=== Results for '{q}' ===\nError (attempt {retry_count}/{max_retries}): {str(e)}\n"
+                        error_msg = f"=== {engine_name.upper()} Results for '{q}' ===\nError: {str(e)}\n"
                         all_results.append(error_msg)
-                        
-                        # Save error message to file
-                        sanitized_query = "".join(c for c in q if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')[:30]
-                        filename = f"tmp/search_{sanitized_query}_{int(time.time())}_error.txt"
+                        filename = f"tmp/search_{engine_name}_{int(time.time())}_error.txt"
                         self.workspace_tools.save_file(filename, error_msg)
                         all_filenames.append(filename)
-                        print(f"❌ Search failed for '{q}' after {retry_count} attempts: {str(e)}")
-                        success = True  # Mark as processed to move to next query
+                        success = True
         
-        # Combine results
         combined_results = "\n".join(all_results)
         filenames_str = ", ".join(all_filenames)
         
         if not all_filenames:
-            return "Error: No search results could be retrieved."
+            return f"Error: No {engine_name} search results could be retrieved."
         
-        return f"Search results saved to '{filenames_str}'.\n\nResults:\n{combined_results}"
+        return f"{engine_name.upper()} Search results saved to '{filenames_str}'.\n\nResults:\n{combined_results}"
 
 
 class NewsNowWrapper:
@@ -464,23 +463,23 @@ class NewsNowWrapper:
             else: print(f"❌ {error_msg}")
             return {"source": source_id, "error": error_msg, "items": []}
     
-    def search_news_and_save(self, query: str, sources: Optional[List[str]] = None, 
-                             count_per_source: int = 10, logger=None) -> str:
+    def get_hot_topics_and_save(self, sources: Optional[List[str]] = None, 
+                               count_per_source: int = 10, logger=None) -> str:
         """
-        Search for news across multiple sources and save results.
+        Fetch trending/hot topics across multiple sources and save results.
+        Use this when you need to know what's currently trending or popular on social media/news sites.
         
         Args:
-            query: The search query (used for relevance and filename)
             sources: List of source IDs to query (defaults to DEFAULT_SOURCES)
             count_per_source: Number of items per source
             logger: Optional logger function
             
         Returns:
-            str: Formatted news results and saved file info
+            str: Formatted hot topics and saved file info
         """
         sources = sources or self.DEFAULT_SOURCES
         
-        msg = f"🔍 Searching news for: '{query}' from {len(sources)} sources"
+        msg = f"🔍 Fetching hot topics from {len(sources)} sources"
         if logger: logger(msg)
         else: print(msg)
         
@@ -502,8 +501,8 @@ class NewsNowWrapper:
                 ])
         
         # Format results
-        formatted_output = f"=== NewsNow Search Results for '{query}' ===\n"
-        formatted_output += f"Searched {len(sources)} sources: {', '.join(sources)}\n"
+        formatted_output = f"=== NewsNow Hot Topics ({time.strftime('%Y-%m-%d %H:%M:%S')}) ===\n"
+        formatted_output += f"Sources: {', '.join(sources)}\n"
         formatted_output += f"Total items found: {len(all_items)}\n\n"
         
         for result in all_results:
@@ -527,16 +526,15 @@ class NewsNowWrapper:
                     formatted_output += "\n"
         
         # Save results to file
-        sanitized_query = "".join(c for c in query if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')[:30]
-        filename = f"tmp/news_{sanitized_query}_{int(time.time())}.txt"
+        filename = f"tmp/hot_topics_{int(time.time())}.txt"
         
         self.workspace_tools.save_file(filename, formatted_output)
         
-        msg = f"✓ News results saved to {filename}"
+        msg = f"✓ Hot topics saved to {filename}"
         if logger: logger(msg)
         else: print(msg)
         
-        return f"News search results saved to '{filename}'.\n\n{formatted_output}"
+        return f"Hot topics saved to '{filename}'.\n\n{formatted_output}"
     
     def list_available_sources(self) -> str:
         """

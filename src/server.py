@@ -12,12 +12,16 @@ import hashlib
 import json
 
 # Add project root to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(PROJECT_ROOT)
 
 # Session storage file path
 SESSIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions.json')
+# Config file path
+CONFIG_FILE = os.path.join(PROJECT_ROOT, 'agent_config.yaml')
 
 from src.main import AgentSystem
+from src.schema.config import load_agent_config
 
 app = FastAPI()
 
@@ -139,6 +143,7 @@ def run_agent_task(goal: str, workspace_root: str = None, config_overrides: dict
         root = workspace_root if workspace_root else session.workspace_root
         session.system = AgentSystem(
             workspace_root=root,
+            config_path=CONFIG_FILE,
             logger=log_callback,
             input_provider=input_callback,
             config_overrides=config_overrides,
@@ -174,10 +179,15 @@ def run_agent(req: GoalRequest, background_tasks: BackgroundTasks):
 
 @app.get("/api/status")
 def get_status():
+    active_workspace = None
+    if session.system and hasattr(session.system, 'workspace_root'):
+        active_workspace = session.system.workspace_root
+        
     return {
         "is_running": session.is_running,
         "waiting_for_input": session.waiting_for_input,
-        "logs": session.logs
+        "logs": session.logs,
+        "active_workspace": active_workspace
     }
 
 
@@ -482,21 +492,20 @@ def cancel_input():
 @app.get("/api/config")
 def get_config():
     """Get current configuration settings"""
-    config = {
-        "enable_search_tool": True,
-        "enable_hitl": True,
-        "enable_simple_task_check": True,
-        "enable_deep_research": True,
-        "deep_research_use_simple_goal": False,
-    }
+    # Try to get config from active system first
     if session.system and hasattr(session.system, 'config'):
-        config.update({
-            "enable_search_tool": session.system.config.enable_search_tool,
-            "enable_hitl": session.system.config.enable_hitl,
-            "enable_simple_task_check": session.system.config.enable_simple_task_check,
-            "enable_deep_research": session.system.config.enable_deep_research,
-            "deep_research_use_simple_goal": session.system.config.deep_research_use_simple_goal,
-        })
+        cfg = session.system.config
+    else:
+        # Fallback to loading from file
+        cfg = load_agent_config(CONFIG_FILE)
+        
+    config = {
+        "enable_search_tool": cfg.enable_search_tool,
+        "enable_hitl": cfg.enable_hitl,
+        "enable_simple_task_check": cfg.enable_simple_task_check,
+        "enable_deep_research": cfg.enable_deep_research,
+        "deep_research_use_simple_goal": cfg.deep_research_use_simple_goal,
+    }
     return {"config": config}
 
 

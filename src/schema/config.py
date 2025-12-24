@@ -1,6 +1,6 @@
 import os
 import yaml
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
 class ModelConfig(BaseModel):
@@ -23,7 +23,7 @@ class AgentSettings(ModelConfig):
 
 class AgentConfig(BaseModel):
     planner: AgentSettings
-    deep_research_planner: AgentSettings = None  # Specialized planner for deep research
+    deep_research_planner: Optional[AgentSettings] = None  # Specialized planner for deep research
     selector: AgentSettings
     code_agent: AgentSettings
     analyst_agent: AgentSettings

@@ -103,6 +103,14 @@ class AgentSystem:
         self.analyst_agent = AnalystAgent(self.workspace_tools, enable_search=enable_search)
         self.memory_agent = MemoryAgent()
         
+        # Initialize visitor for AnalystAgent
+        crawl_server_url = None
+        if isinstance(self.config.crawler, dict):
+            crawl_server_url = self.config.crawler.get('server_url')
+        elif hasattr(self.config.crawler, 'server_url'):
+            crawl_server_url = self.config.crawler.server_url
+        self.analyst_agent.initialize_visitor(self.analyst_model, crawl_server_url=crawl_server_url)
+        
         # Initialize DeepResearchAgent if enabled
         self.deep_research_enabled = self.config.enable_deep_research
         self.deep_research_agent = DeepResearchAgent(
@@ -727,6 +735,11 @@ Use the research findings above to inform your planning. Agents can read the fil
             )
             self.log(f"\n📝 Final Report ({task_type}):\n{report_content}")
 
+            # Save final report to workspace
+            report_filename = f"final_report_{task_type.lower().replace(' ', '_')}.md"
+            self.workspace_tools.save_file(report_filename, report_content)
+            self.log(f"✅ Final report saved to {report_filename}")
+
             # LOGGING: System Completion
             self.performance_manager.log_performance(
                 task="System Completion",
@@ -756,7 +769,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="agent_config_ust.yaml",
+        default="agent_config.yaml",
         help="Path to the YAML configuration file (default: agent_config.yaml)"
     )
     parser.add_argument(

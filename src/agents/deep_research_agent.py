@@ -67,7 +67,7 @@ class DeepResearchAgent:
         news_instruction = ""
         if is_opinion_related and self.enable_news:
             news_instruction = """\n7. IMPORTANT: This topic appears to be related to public opinion/news/trending topics.
-   Use the search_news_and_save tool to get the latest news and public sentiment.
+   Use the get_hot_topics_and_save tool to get the latest trending topics.
    Available news sources include: weibo (微博), zhihu (知乎), baidu (百度), toutiao (今日头条), etc."""
         
         prompt = f"""You are a Deep Research Agent. Your task is to perform comprehensive research on the following topic and provide a detailed report.
@@ -78,9 +78,9 @@ Research Plan:
 {research_plan}
 
 Instructions:
-1. Use available tools (search_and_save, visit_and_save, search_news_and_save) to gather information
-2. Search for relevant information and visit important websites
-3. Organize findings into a comprehensive report
+1. Use available tools (search_and_save, search_baidu_and_save, visit_and_save, get_hot_topics_and_save) to gather information.
+2. Search for relevant information and ALWAYS use visit_and_save to read the full content of the most important websites found.
+3. Organize findings into a comprehensive report.
 4. Include specific details, statistics, and insights
 5. Cite sources where applicable
 6. Provide clear conclusions and recommendations{news_instruction}
@@ -91,14 +91,15 @@ Please conduct the research and provide a detailed report."""
         tools = []
         
         if self.enable_search and self.search_wrapper:
-            tools.append(lambda q: self.search_wrapper.search_and_save(q, logger=logger))
+            tools.append(self.search_wrapper.search_and_save)
+            tools.append(self.search_wrapper.search_baidu_and_save)
         
         # Add news search tool for opinion-related topics or when explicitly enabled
         if self.enable_news and self.news_wrapper:
-            tools.append(lambda q, sources=None, count=10: self.news_wrapper.search_news_and_save(q, sources, count, logger=logger))
+            tools.append(self.news_wrapper.get_hot_topics_and_save)
         
         if self.visitor:
-            tools.append(lambda u, g, s=False, r=True, e=None: self.visitor.visit_and_save(u, g, s, r, e, logger=logger))
+            tools.append(self.visitor.visit_and_save)
         
         # Create and run the research agent
         instructions = [
@@ -112,7 +113,7 @@ Please conduct the research and provide a detailed report."""
         if is_opinion_related and self.enable_news:
             instructions.append(
                 "For topics related to public opinion, trending news, or current events, "
-                "use the search_news_and_save tool to get latest news from multiple sources "
+                "use the get_hot_topics_and_save tool to get latest trending topics from multiple sources "
                 "like Weibo, Zhihu, Baidu, etc."
             )
         
