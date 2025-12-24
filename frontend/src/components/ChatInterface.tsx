@@ -117,6 +117,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
         currentStep = null
       }
+      // Final Report
+      else if (msg.includes('Final Report')) {
+        structuredMessages.push({
+          id: `msg-${messageId++}`,
+          type: 'agent',
+          content: msg,
+          timestamp: log.timestamp,
+          status: 'success'
+        })
+      }
       // Planning Phase
       else if (msg.includes('Generating Plan') && !msg.includes('PLAN REVIEW')) {
         currentStep = {
@@ -237,6 +247,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           id: `msg-${messageId++}`,
           type: 'system',
           content: '🏁 Mission Complete!',
+          timestamp: log.timestamp,
+          status: 'success'
+        })
+      }
+      // Final report saved notification
+      else if (msg.includes('Final report saved to')) {
+        structuredMessages.push({
+          id: `msg-${messageId++}`,
+          type: 'system',
+          content: msg,
           timestamp: log.timestamp,
           status: 'success'
         })
@@ -575,6 +595,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           </pre>
                         )}
                       </div>
+                    </div>
+                  ) : child.content.includes('Final Report') ? (
+                    <div className="chat-substep-content markdown-content">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {child.content}
+                      </ReactMarkdown>
                     </div>
                   ) : (
                     <div className="chat-substep-content" style={{ whiteSpace: 'pre-wrap' }}>

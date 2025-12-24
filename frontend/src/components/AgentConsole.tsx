@@ -10,7 +10,8 @@ const AgentConsole: React.FC = () => {
   const [status, setStatus] = React.useState<SystemStatus>({
     is_running: false,
     waiting_for_input: false,
-    logs: []
+    logs: [],
+    active_workspace: null
   })
   const [config, setConfig] = React.useState<SystemConfig>({
     enable_search_tool: true,
@@ -278,6 +279,27 @@ const AgentConsole: React.FC = () => {
         // Track if agent has started
         if (data.is_running || data.logs.length > 0) {
           setHasStarted(true)
+        }
+
+        // If agent is running but we don't have a live session ID (e.g. after refresh),
+        // try to find which session matches the active workspace.
+        if (data.is_running && !liveSessionId && data.active_workspace && workspaceRoot && sessions.length > 0) {
+          const activeWs = data.active_workspace.replace(/\\/g, '/')
+          const baseRoot = workspaceRoot.replace(/\\/g, '/')
+          
+          const foundSession = sessions.find(s => {
+            const groupPrefix = s.group ? `${s.group}/` : ''
+            const sessionWs = `${baseRoot}/${groupPrefix}${s.workspace}`.replace(/\\/g, '/')
+            return activeWs === sessionWs || activeWs.endsWith(sessionWs)
+          })
+          
+          if (foundSession) {
+            console.log('🚀 Reconnected to live session:', foundSession.name)
+            setLiveSessionId(foundSession.id)
+            setCurrentSessionId(foundSession.id)
+            // Sync logs immediately to avoid flicker
+            setSessions(prev => prev.map(s => s.id === foundSession.id ? { ...s, logs: data.logs || [] } : s))
+          }
         }
 
         // If we are streaming logs into a session, save them

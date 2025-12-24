@@ -8,6 +8,7 @@ export interface SystemStatus {
   is_running: boolean
   waiting_for_input: boolean
   logs: LogEntry[]
+  active_workspace?: string | null
 }
 
 export interface WorkspaceInfo {
