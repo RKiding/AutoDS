@@ -3,13 +3,16 @@ from typing import Any
 from agno.agent import Agent
 from agno.tools.duckduckgo import DuckDuckGoTools
 from src.schema.models import Context, Step, ExecutionLog
-from src.utils.tools import WorkspaceTools, SearchWrapper
+from src.utils.tools import WorkspaceTools, SearchWrapper, NewsNowWrapper
 
 class AnalystAgent:
-    def __init__(self, workspace_tools: WorkspaceTools, enable_search: bool = True):
+    def __init__(self, workspace_tools: WorkspaceTools, enable_search: bool = True, 
+                 enable_news: bool = True):
         self.workspace_tools = workspace_tools
         self.enable_search = enable_search
+        self.enable_news = enable_news
         self.search_wrapper = SearchWrapper(workspace_tools) if enable_search else None
+        self.news_wrapper = NewsNowWrapper(workspace_tools) if enable_news else None
 
     def run(self, step: Step, context: Context, model: Any, stop_checker=None) -> ExecutionLog:
         """
@@ -25,6 +28,15 @@ class AnalystAgent:
         
         # Get project history (previous steps and shared state)
         project_history = context.get_project_history()
+        
+        # Check if the task is opinion/news related
+        is_opinion_related = NewsNowWrapper.is_opinion_related(step.task + " " + step.description) if self.enable_news else False
+        
+        news_instruction = ""
+        if is_opinion_related and self.enable_news:
+            news_instruction = """\n        8. IMPORTANT: This task appears to be related to public opinion/news/trending topics.
+           Use the search_news_and_save tool to get the latest news and public sentiment.
+           Available sources: weibo (微博), zhihu (知乎), baidu (百度), toutiao (今日头条), etc."""
         
         prompt = f"""
         You are an expert Data Analyst and Researcher.
@@ -57,7 +69,7 @@ class AnalystAgent:
         4. Do NOT write Python code to be executed. You CANNOT execute code.
         5. If the task requires creating new data files (CSV, PNG, etc.) or performing calculations, you MUST state: "TASK_REQUIRES_CODE_AGENT".
         6. If you find data that should be saved, use the save_file tool (ONLY for text/markdown).
-        7. Focus on ANALYSIS (finding patterns, issues, insights), not just formatting or repeating the data.
+        7. Focus on ANALYSIS (finding patterns, issues, insights), not just formatting or repeating the data.{news_instruction}
         
         CRITICAL OUTPUT INSTRUCTION:
         If the Task Description above asks you to start your response with a specific string (e.g., "DATA_ISSUE_FOUND:"), you MUST do it. 
@@ -65,7 +77,7 @@ class AnalystAgent:
         """
         
         # 2. Create Agent
-        # We give it read/save/list tools + search_and_save wrapper
+        # We give it read/save/list tools + search_and_save wrapper + news search
         tools = [
             self.workspace_tools.read_file,
             self.workspace_tools.save_file,
@@ -74,6 +86,10 @@ class AnalystAgent:
         
         if self.enable_search and self.search_wrapper:
             tools.append(self.search_wrapper.search_and_save)
+        
+        # Add news search tool for opinion-related tasks
+        if self.enable_news and self.news_wrapper:
+            tools.append(self.news_wrapper.search_news_and_save)
         
         agent = Agent(
             name="AnalystAgent",

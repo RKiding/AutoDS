@@ -5,12 +5,26 @@ import re
 import time
 import json
 import requests
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List, Any, Dict
 
 try:
     from agno.tools.duckduckgo import DuckDuckGoTools
 except ImportError:
     DuckDuckGoTools = None
+
+# Keywords that indicate public opinion/sentiment related queries
+OPINION_KEYWORDS = [
+    # Chinese keywords
+    "舆论", "舆情", "热搜", "热点", "热门", "新闻", "头条", "热议",
+    "评论", "讨论", "争议", "风波", "事件", "动态", "趋势", "话题",
+    "热度", "关注", "传闻", "报道", "消息", "最新", "实时",
+    "社会", "民意", "公众", "大众", "网友", "网民", "社交媒体",
+    # English keywords  
+    "news", "trending", "hot", "opinion", "public", "sentiment",
+    "discussion", "controversy", "event", "trend", "topic",
+    "headline", "breaking", "latest", "viral", "social media",
+    "public opinion", "buzz", "rumor", "report"
+]
 
 try:
     from openai import OpenAI
@@ -294,6 +308,247 @@ class SearchWrapper:
             return "Error: No search results could be retrieved."
         
         return f"Search results saved to '{filenames_str}'.\n\nResults:\n{combined_results}"
+
+
+class NewsNowWrapper:
+    """
+    Wrapper for NewsNow API to fetch trending news from various sources.
+    Used when queries involve public opinion, trending topics, or news-related content.
+    
+    Available sources include:
+    - weibo: 微博热搜
+    - zhihu: 知乎热榜
+    - baidu: 百度热搜
+    - toutiao: 今日头条
+    - douyin: 抖音热搜
+    - bilibili: B站热门
+    - kr36: 36氪
+    - ithome: IT之家
+    - thepaper: 澎湃新闻
+    - hackernews: Hacker News
+    - producthunt: Product Hunt
+    - github: GitHub Trending
+    And 30+ more sources...
+    """
+    
+    # Default news sources to query
+    DEFAULT_SOURCES = ["weibo", "zhihu", "baidu", "toutiao"]
+    
+    # Available news sources with descriptions
+    AVAILABLE_SOURCES = {
+        # Chinese sources
+        "weibo": "微博热搜 - Weibo Hot Search",
+        "zhihu": "知乎热榜 - Zhihu Hot List",
+        "baidu": "百度热搜 - Baidu Hot Search",
+        "toutiao": "今日头条 - Toutiao Headlines",
+        "douyin": "抖音热搜 - Douyin Hot Search",
+        "bilibili": "B站热门 - Bilibili Trending",
+        "thepaper": "澎湃新闻 - The Paper",
+        "36kr": "36氪 - 36Kr News",
+        "ithome": "IT之家 - IT Home",
+        "wallstreetcn": "华尔街见闻 - Wall Street CN",
+        "cls": "财联社 - CLS News",
+        "caixin": "财新网 - Caixin",
+        "yicai": "第一财经 - Yicai",
+        "sina-finance": "新浪财经 - Sina Finance",
+        "eastmoney": "东方财富 - East Money",
+        "stockstar": "证券之星 - Stock Star",
+        "jiemian": "界面新闻 - Jiemian",
+        "ifeng": "凤凰新闻 - iFeng News",
+        "netease": "网易新闻 - NetEase News",
+        "qq": "腾讯新闻 - QQ News",
+        "163": "网易热榜 - NetEase Hot",
+        "weread": "微信读书 - WeRead",
+        "sspai": "少数派 - SSPai",
+        "coolapk": "酷安热榜 - Coolapk",
+        "hupu": "虎扑热搜 - Hupu",
+        "tieba": "百度贴吧 - Tieba",
+        "douban-movie": "豆瓣电影 - Douban Movie",
+        "douban-group": "豆瓣小组 - Douban Group",
+        # Tech sources
+        "hackernews": "Hacker News - Tech News",
+        "producthunt": "Product Hunt - New Products",
+        "github": "GitHub Trending - Open Source",
+        "v2ex": "V2EX - Tech Forum",
+        "juejin": "掘金 - Tech Articles",
+        "csdn": "CSDN - IT Community",
+        "oschina": "开源中国 - OSChina",
+        "segmentfault": "思否 - SegmentFault",
+        "infoq": "InfoQ - Software Dev",
+    }
+    
+    def __init__(self, workspace_tools: WorkspaceTools, 
+                 base_url: str = "https://newsnow.busiyi.world"):
+        """
+        Initialize NewsNowWrapper.
+        
+        Args:
+            workspace_tools: WorkspaceTools instance for file operations
+            base_url: Base URL for NewsNow API
+        """
+        self.workspace_tools = workspace_tools
+        self.base_url = base_url or os.getenv("NEWSNOW_BASE_URL", "https://newsnow.busiyi.world")
+        self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    
+    @staticmethod
+    def is_opinion_related(query: str) -> bool:
+        """
+        Check if a query is related to public opinion/sentiment/news.
+        
+        Args:
+            query: The search query
+            
+        Returns:
+            bool: True if the query is opinion-related
+        """
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in OPINION_KEYWORDS)
+    
+    def get_news(self, source_id: str, count: int = 10, logger=None) -> Dict:
+        """
+        Get news from a specific source.
+        
+        Args:
+            source_id: The news source ID (e.g., 'weibo', 'zhihu')
+            count: Number of news items to return
+            logger: Optional logger function
+            
+        Returns:
+            dict: News items with title and url
+        """
+        try:
+            msg = f"📰 Fetching news from {source_id}..."
+            if logger: logger(msg)
+            else: print(msg)
+            
+            response = requests.get(
+                f"{self.base_url}/api/s",
+                params={"id": source_id},
+                headers={"User-Agent": self.user_agent},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("items", [])[:count]
+                
+                result = {
+                    "source": source_id,
+                    "source_name": self.AVAILABLE_SOURCES.get(source_id, source_id),
+                    "status": data.get("status", "unknown"),
+                    "updated_time": data.get("updatedTime"),
+                    "items": [
+                        {
+                            "title": item.get("title", ""),
+                            "url": item.get("url", ""),
+                            "extra": item.get("extra", {})
+                        }
+                        for item in items
+                    ]
+                }
+                
+                msg = f"✓ Got {len(result['items'])} news items from {source_id}"
+                if logger: logger(msg)
+                else: print(msg)
+                
+                return result
+            else:
+                error_msg = f"API error: {response.status_code}"
+                if logger: logger(f"❌ {error_msg}")
+                else: print(f"❌ {error_msg}")
+                return {"source": source_id, "error": error_msg, "items": []}
+                
+        except Exception as e:
+            error_msg = f"Failed to fetch news from {source_id}: {str(e)}"
+            if logger: logger(f"❌ {error_msg}")
+            else: print(f"❌ {error_msg}")
+            return {"source": source_id, "error": error_msg, "items": []}
+    
+    def search_news_and_save(self, query: str, sources: Optional[List[str]] = None, 
+                             count_per_source: int = 10, logger=None) -> str:
+        """
+        Search for news across multiple sources and save results.
+        
+        Args:
+            query: The search query (used for relevance and filename)
+            sources: List of source IDs to query (defaults to DEFAULT_SOURCES)
+            count_per_source: Number of items per source
+            logger: Optional logger function
+            
+        Returns:
+            str: Formatted news results and saved file info
+        """
+        sources = sources or self.DEFAULT_SOURCES
+        
+        msg = f"🔍 Searching news for: '{query}' from {len(sources)} sources"
+        if logger: logger(msg)
+        else: print(msg)
+        
+        all_results = []
+        all_items = []
+        
+        for source in sources:
+            # Add delay between requests
+            if all_results:
+                time.sleep(0.5)
+            
+            result = self.get_news(source, count_per_source, logger=logger)
+            all_results.append(result)
+            
+            if result.get("items"):
+                all_items.extend([
+                    {**item, "source": source, "source_name": result.get("source_name", source)}
+                    for item in result["items"]
+                ])
+        
+        # Format results
+        formatted_output = f"=== NewsNow Search Results for '{query}' ===\n"
+        formatted_output += f"Searched {len(sources)} sources: {', '.join(sources)}\n"
+        formatted_output += f"Total items found: {len(all_items)}\n\n"
+        
+        for result in all_results:
+            source_name = result.get("source_name", result.get("source", "Unknown"))
+            formatted_output += f"\n--- {source_name} ---\n"
+            
+            if result.get("error"):
+                formatted_output += f"Error: {result['error']}\n"
+            else:
+                for i, item in enumerate(result.get("items", []), 1):
+                    title = item.get("title", "No title")
+                    url = item.get("url", "")
+                    extra = item.get("extra", {})
+                    info = extra.get("info", "") if isinstance(extra, dict) else ""
+                    
+                    formatted_output += f"{i}. {title}"
+                    if info:
+                        formatted_output += f" ({info})"
+                    if url:
+                        formatted_output += f"\n   URL: {url}"
+                    formatted_output += "\n"
+        
+        # Save results to file
+        sanitized_query = "".join(c for c in query if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')[:30]
+        filename = f"tmp/news_{sanitized_query}_{int(time.time())}.txt"
+        
+        self.workspace_tools.save_file(filename, formatted_output)
+        
+        msg = f"✓ News results saved to {filename}"
+        if logger: logger(msg)
+        else: print(msg)
+        
+        return f"News search results saved to '{filename}'.\n\n{formatted_output}"
+    
+    def list_available_sources(self) -> str:
+        """
+        List all available news sources.
+        
+        Returns:
+            str: Formatted list of available sources
+        """
+        output = "=== Available NewsNow Sources ===\n\n"
+        for source_id, description in self.AVAILABLE_SOURCES.items():
+            output += f"- {source_id}: {description}\n"
+        return output
 
 
 class VisitAndSave:
