@@ -791,6 +791,14 @@ def update_session_logs(session_id: int, logs: List[Dict[str, Any]]):
     return {"status": "error", "message": "Session not found"}
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    from pathlib import Path
+    from dotenv import load_dotenv
+    # Load .env from src directory
+    env_path = Path(__file__).parent.parent / ".env"
+    load_dotenv(env_path)
+
+    port = int(os.getenv("API_PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
