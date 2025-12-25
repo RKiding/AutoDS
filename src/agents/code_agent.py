@@ -26,6 +26,12 @@ class CodeAgent:
         # Get project history (previous steps and shared state)
         project_history = context.get_project_history()
         
+        # Detect if this is a hot topic/stock analysis task
+        is_hot_topic_task = any(keyword in (context.user_goal.lower() + step.description.lower()) for keyword in [
+            "热点", "舆情", "股票", "股价", "热搜", "趋势", "新闻", 
+            "hot topic", "trending", "stock", "market", "sentiment", "news"
+        ])
+        
         prompt = f"""
         You are an expert Python Developer.
         Your task is to write Python code to complete the following step:
@@ -70,10 +76,22 @@ class CodeAgent:
         9. Do NOT generate synthetic/dummy data to bypass errors. If a file is missing, fail so we can fix the path.
         """
         
+        # Add hot topic specific instructions
+        if is_hot_topic_task:
+            prompt += """
+        
+        🔥 HOT TOPIC / STOCK ANALYSIS MODE:
+        - The workspace has access to 'akshare' library for Chinese stock data (e.g., ak.stock_zh_a_hist())
+        - Hot topics data may already be fetched and saved in workspace files
+        - DO NOT try to use Yahoo Finance API, Alpha Vantage, or web scraping - use akshare instead
+        - For visualizations, use matplotlib/seaborn with Chinese font support (plt.rcParams['font.sans-serif'] = ['SimHei'])
+        - Focus on correlating trending topics with stock price movements
+        """
+        
         tools = []
         if self.enable_search and self.search_wrapper:
             tools.append(self.search_wrapper.search_and_save)
-            prompt += "\n        9. You have access to a 'search_and_save' tool. Use it if you need to find external documentation or libraries."
+            prompt += "\n        10. You have access to a 'search_and_save' tool. Use it if you need to find external documentation or libraries."
 
         # 2. Create Agent (Lightweight wrapper)
         agent = Agent(

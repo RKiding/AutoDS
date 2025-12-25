@@ -35,3 +35,32 @@ export interface RunRequest {
   workspace_root?: string
   config?: Partial<SystemConfig>
 }
+
+export interface HotTopicItem {
+  title: string
+  url?: string
+  hot_value?: string
+  index?: number
+}
+
+export interface PolymarketEvent {
+  id: string
+  question: string
+  description?: string
+  outcomes: string[]
+  outcomePrices: string[]
+  volume: string
+  liquidity?: string
+  active?: boolean
+  closed?: boolean
+  updatedAt?: string
+  slug?: string
+}
+
+export interface HotDataResponse {
+  status: string
+  polymarket: PolymarketEvent[]
+  newsnow: {
+    [key: string]: HotTopicItem[]
+  }
+}

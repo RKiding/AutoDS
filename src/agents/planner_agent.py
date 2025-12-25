@@ -21,6 +21,12 @@ class PlannerAgent:
         
         # ENHANCEMENT: Get file summaries for CSVs
         file_summaries, _ = self.workspace_tools.get_csv_summaries()
+        
+        # Detect if this is a hot topic analysis task
+        is_hot_topic_analysis = any(keyword in user_goal.lower() for keyword in [
+            "热点", "舆情", "股票", "股价", "热搜", "趋势", "新闻", 
+            "hot topic", "trending", "stock", "market", "sentiment"
+        ])
 
         prompt = f"""
         You are an expert Technical Project Manager.
@@ -62,6 +68,18 @@ class PlannerAgent:
         }}
         
         IMPORTANT: Output ONLY valid JSON with the exact structure above. No markdown, no extra text, no other keys.
+        """
+        
+        # Add hot topic analysis specific guidelines
+        if is_hot_topic_analysis:
+            prompt += """
+        
+        🔥 HOT TOPIC ANALYSIS MODE DETECTED:
+        - The system has built-in tools for getting trending topics: get_hot_topics_and_save (supports weibo, zhihu, baidu, etc.)
+        - The system has akshare for Chinese stock price data
+        - DO NOT suggest using external APIs like Yahoo Finance or Alpha Vantage
+        - Steps should focus on: 1) Get trending topics, 2) Analyze relevant stocks with akshare, 3) Generate visualizations
+        - Emphasize using BUILT-IN tools rather than web scraping or external APIs
         """
         
         tools = []

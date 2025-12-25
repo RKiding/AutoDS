@@ -219,3 +219,4 @@ src/workspace_web
 agent_config.yaml
 src/sessions.json
 **/.DS_Store
+src/utils/hot_data_cache.json

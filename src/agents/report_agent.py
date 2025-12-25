@@ -39,6 +39,8 @@ Based on the execution history, identify the primary task type from these catego
 
 4. **Implementation**: The project involves building, creating, writing, developing, implementing software components, APIs, scripts, extracting features. Focus on code development and architecture.
 
+6. **Hot Topic Analysis**: The project involves analyzing trending topics, public opinion, prediction markets (Polymarket), and their impact on financial markets or stocks. Focus on sentiment, trends, and stock correlations.
+
 5. **General**: The project doesn't fit neatly into above categories or is a mix of multiple types.
 
 Analyze the execution history carefully:
@@ -276,6 +278,45 @@ Do not include any explanation, just the category name.
 """
 
     @staticmethod
+    def get_hot_topic_report_guide() -> str:
+        """Guide template for hot topic and sentiment analysis projects."""
+        return """
+# 📊 Hot Topic & Market Impact Analysis Report
+
+## 1. Executive Summary
+- Overview of the analyzed period and key trending themes.
+- Summary of the most significant market-moving events discovered.
+
+## 2. 🌍 Public Opinion & Sentiment Landscape
+- **Trending Topics**: Analysis of top trends from social media (Weibo, Zhihu, etc.).
+- **Sentiment Analysis**: Overall mood of the public regarding key events.
+- **Visualizations**: Word clouds of hot keywords, trend charts showing topic evolution.
+
+## 3. 🔮 Prediction Market Insights (Polymarket)
+- **Key Markets**: Analysis of relevant Polymarket prediction results.
+- **Odds & Probabilities**: How the "wisdom of the crowd" views future outcomes.
+- **Divergence**: Any notable differences between public opinion and prediction market odds.
+
+## 4. 📈 Stock & Financial Correlation
+- **Associated Stocks**: List of stocks or sectors identified as related to the hot topics.
+- **Price Action**: Summary of recent price movements for these stocks (using akshare data).
+- **Correlation Analysis**: How specific news events or sentiment shifts impacted stock prices.
+- **Visualizations**: Stock price charts overlaid with key event markers.
+
+## 5. 🔮 Future Outlook & Predictions
+- **Short-term Forecasts**: Expected market reactions in the coming days/weeks.
+- **Risk Factors**: Potential events that could shift the current trend.
+- **Investment Implications**: Strategic takeaways for investors.
+
+## 6. 🛠️ Methodology & Data Sources
+- Sources used (NewsNow, Polymarket, akshare).
+- Analysis techniques applied.
+
+## 7. 📂 Artifacts & Deliverables
+- Generated charts, data extracts, and intermediate analysis files.
+"""
+
+    @staticmethod
     def select_report_guide(task_type: str) -> str:
         """Select the appropriate report guide based on task type."""
         guides = {
@@ -283,6 +324,7 @@ Do not include any explanation, just the category name.
             "Analysis": ReportAgent.get_analysis_report_guide(),
             "Data Processing": ReportAgent.get_data_processing_report_guide(),
             "Implementation": ReportAgent.get_implementation_report_guide(),
+            "Hot Topic Analysis": ReportAgent.get_hot_topic_report_guide(),
         }
         return guides.get(task_type, ReportAgent.get_general_report_guide())
 
@@ -323,7 +365,7 @@ Do not include any explanation, just the category name.
             task_type = type_response.content.strip()
             
             # Validate the response
-            valid_types = ["Modeling", "Analysis", "Data Processing", "Implementation", "General"]
+            valid_types = ["Modeling", "Analysis", "Data Processing", "Implementation", "Hot Topic Analysis", "General"]
             if task_type not in valid_types:
                 logger_callback(f"   ⚠️ Detected task type '{task_type}' not recognized. Using 'General'.")
                 task_type = "General"

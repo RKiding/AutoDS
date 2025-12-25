@@ -21,12 +21,54 @@ OPINION_KEYWORDS = [
     "评论", "讨论", "争议", "风波", "事件", "动态", "趋势", "话题",
     "热度", "关注", "传闻", "报道", "消息", "最新", "实时",
     "社会", "民意", "公众", "大众", "网友", "网民", "社交媒体",
+    "预测市场", "博彩", "赔率", "Polymarket",
     # English keywords  
     "news", "trending", "hot", "opinion", "public", "sentiment",
     "discussion", "controversy", "event", "trend", "topic",
     "headline", "breaking", "latest", "viral", "social media",
-    "public opinion", "buzz", "rumor", "report"
+    "public opinion", "buzz", "rumor", "report", "prediction market",
+    "odds", "polymarket"
 ]
+
+class HotDataCache:
+    """
+    Simple cache for hot topics and prediction markets to prevent redundant fetching.
+    Supports persistent file-based caching for faster startup.
+    """
+    _cache = {}
+    _expiry = 300 # 5 minutes cache
+    _cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hot_data_cache.json")
+
+    @classmethod
+    def _load_persistent_cache(cls):
+        if not cls._cache and os.path.exists(cls._cache_file):
+            try:
+                with open(cls._cache_file, 'r') as f:
+                    cls._cache = json.load(f)
+            except:
+                cls._cache = {}
+
+    @classmethod
+    def _save_persistent_cache(cls):
+        try:
+            with open(cls._cache_file, 'w') as f:
+                json.dump(cls._cache, f)
+        except:
+            pass
+
+    @classmethod
+    def get(cls, key: str) -> Optional[Any]:
+        cls._load_persistent_cache()
+        if key in cls._cache:
+            data, timestamp = cls._cache[key]
+            if time.time() - timestamp < cls._expiry:
+                return data
+        return None
+
+    @classmethod
+    def set(cls, key: str, data: Any):
+        cls._cache[key] = (data, time.time())
+        cls._save_persistent_cache()
 
 try:
     from openai import OpenAI
@@ -406,15 +448,13 @@ class NewsNowWrapper:
     def get_news(self, source_id: str, count: int = 10, logger=None) -> Dict:
         """
         Get news from a specific source.
-        
-        Args:
-            source_id: The news source ID (e.g., 'weibo', 'zhihu')
-            count: Number of news items to return
-            logger: Optional logger function
-            
-        Returns:
-            dict: News items with title and url
         """
+        cache_key = f"newsnow_{source_id}_{count}"
+        cached_data = HotDataCache.get(cache_key)
+        if cached_data:
+            if logger: logger(f"ℹ️ Using cached news for {source_id}")
+            return cached_data
+
         try:
             msg = f"📰 Fetching news from {source_id}..."
             if logger: logger(msg)
@@ -446,6 +486,7 @@ class NewsNowWrapper:
                     ]
                 }
                 
+                HotDataCache.set(cache_key, result)
                 msg = f"✓ Got {len(result['items'])} news items from {source_id}"
                 if logger: logger(msg)
                 else: print(msg)
@@ -548,6 +589,169 @@ class NewsNowWrapper:
             output += f"- {source_id}: {description}\n"
         return output
 
+class PolymarketWrapper:
+    """
+    Wrapper for Polymarket API to fetch active prediction markets.
+    """
+    def __init__(self, workspace_tools: WorkspaceTools):
+        self.workspace_tools = workspace_tools
+        self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        self.base_url = "https://gamma-api.polymarket.com"
+
+    def get_active_markets(self, limit: int = 20, logger=None) -> List[Dict]:
+        """
+        Fetch active prediction markets from Polymarket.
+        """
+        cache_key = f"polymarket_{limit}"
+        cached_data = HotDataCache.get(cache_key)
+        if cached_data:
+            if logger: logger("ℹ️ Using cached Polymarket data")
+            return cached_data
+
+        try:
+            msg = f"🔮 Fetching active markets from Polymarket (limit={limit})..."
+            if logger: logger(msg)
+            else: print(msg)
+
+            url = f"{self.base_url}/markets"
+            params = {
+                "active": "true",
+                "closed": "false",
+                "limit": limit
+            }
+            headers = {
+                "User-Agent": self.user_agent,
+                "Accept": "application/json"
+            }
+            
+            response = requests.get(url, params=params, headers=headers, timeout=30)
+            response.raise_for_status()
+            markets = response.json()
+            
+            result = []
+            for m in markets:
+                result.append({
+                    "id": m.get("id"),
+                    "question": m.get("question"),
+                    "slug": m.get("slug"),
+                    "outcomes": m.get("outcomes"),
+                    "outcomePrices": m.get("outcomePrices"),
+                    "volume": m.get("volume"),
+                    "liquidity": m.get("liquidity"),
+                    "updatedAt": m.get("updatedAt")
+                })
+            
+            HotDataCache.set(cache_key, result)
+            msg = f"✓ Got {len(result)} active markets from Polymarket"
+            if logger: logger(msg)
+            else: print(msg)
+            
+            return result
+        except Exception as e:
+            error_msg = f"Failed to fetch Polymarket markets: {str(e)}"
+            if logger: logger(f"❌ {error_msg}")
+            else: print(f"❌ {error_msg}")
+            return []
+
+    def get_hot_markets_and_save(self, limit: int = 20, logger=None) -> str:
+        """
+        Fetch hot markets and save to a file.
+        """
+        markets = self.get_active_markets(limit, logger)
+        if not markets:
+            return "Error: No Polymarket results could be retrieved."
+            
+        formatted_output = f"=== Polymarket Hot Markets ({time.strftime('%Y-%m-%d %H:%M:%S')}) ===\n\n"
+        for i, m in enumerate(markets):
+            formatted_output += f"{i+1}. {m['question']}\n"
+            formatted_output += f"   Prices: {m['outcomePrices']}\n"
+            formatted_output += f"   Volume: {m['volume']}\n\n"
+            
+        filename = f"tmp/polymarket_hot_{int(time.time())}.txt"
+        self.workspace_tools.save_file(filename, formatted_output)
+        
+        return f"Polymarket hot markets saved to '{filename}'.\n\n{formatted_output}"
+
+class HotDataWrapper:
+    """
+    Unified wrapper for fetching hot topics from NewsNow and Polymarket.
+    This is the PREFERRED tool for any queries related to trending topics, 
+    public opinion, or prediction markets.
+    """
+    def __init__(self, workspace_tools: WorkspaceTools):
+        self.workspace_tools = workspace_tools
+        self.news_wrapper = NewsNowWrapper(workspace_tools)
+        self.poly_wrapper = PolymarketWrapper(workspace_tools)
+
+    def get_hot_data_and_save(self, sources: Optional[List[str]] = None, 
+                             poly_limit: int = 10, news_count: int = 5, logger=None) -> str:
+        """
+        Fetch hot data from both Polymarket and NewsNow and save to a file.
+        
+        Args:
+            sources: NewsNow sources (e.g., ['weibo', 'zhihu', 'baidu'])
+            poly_limit: Number of Polymarket markets to fetch
+            news_count: Number of items per NewsNow source
+            
+        Returns:
+            str: Summary of hot data and the filename where it's saved.
+        """
+        msg = "🔍 Fetching unified hot data..."
+        if logger: logger(msg)
+        else: print(msg)
+
+        # 1. Fetch Polymarket
+        poly_markets = self.poly_wrapper.get_active_markets(poly_limit, logger)
+        
+        # 2. Fetch NewsNow
+        sources = sources or ["weibo", "zhihu", "baidu"]
+        news_results = []
+        for source in sources:
+            news_results.append(self.news_wrapper.get_news(source, news_count, logger))
+            time.sleep(0.2) # Small delay
+
+        # 3. Format Output
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        formatted_output = f"# Unified Hot Data Report ({timestamp})\n\n"
+        
+        formatted_output += "## 🔮 Polymarket Prediction Markets\n"
+        if poly_markets:
+            for i, m in enumerate(poly_markets, 1):
+                formatted_output += f"{i}. **{m['question']}**\n"
+                formatted_output += f"   - Prices: {m['outcomePrices']}\n"
+                formatted_output += f"   - Volume: {m['volume']}\n"
+        else:
+            formatted_output += "No Polymarket data available.\n"
+        
+        formatted_output += "\n## 📰 NewsNow Trending Topics\n"
+        for res in news_results:
+            source_name = res.get("source_name", res.get("source", "Unknown"))
+            formatted_output += f"### {source_name}\n"
+            if res.get("items"):
+                for i, item in enumerate(res["items"], 1):
+                    title = item.get("title", "No title")
+                    extra = item.get("extra", {})
+                    info = extra.get("info", "") if isinstance(extra, dict) else ""
+                    formatted_output += f"{i}. {title}"
+                    if info: formatted_output += f" ({info})"
+                    formatted_output += "\n"
+            else:
+                formatted_output += "No items found or error occurred.\n"
+            formatted_output += "\n"
+
+        # 4. Save to file
+        filename = f"tmp/unified_hot_data_{int(time.time())}.md"
+        self.workspace_tools.save_file(filename, formatted_output)
+        
+        msg = f"✅ Unified hot data saved to {filename}"
+        if logger: logger(msg)
+        else: print(msg)
+        
+        return f"Unified hot data (Polymarket & NewsNow) saved to '{filename}'.\n\n{formatted_output}"
+
+    def get_hot_data(self, *args, **kwargs):
+        """Alias for get_hot_data_and_save for backward compatibility"""
+        return self.get_hot_data_and_save(*args, **kwargs)
 
 class VisitAndSave:
     """Visits webpages and saves their content, with optional summarization using LLM."""

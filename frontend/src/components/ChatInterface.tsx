@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import { LogEntry, SystemConfig } from '../types'
+import HotDataPanel from './HotDataPanel'
 
 interface ChatMessage {
   id: string
@@ -700,13 +701,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               background: 'linear-gradient(135deg, var(--text-title) 0%, var(--accent-color) 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text'
+              backgroundClip: 'text',
+              marginBottom: '12px'
             }}>Welcome to AutoDS Agent</h2>
-            <p>I'm your AI-powered data science assistant. Describe your task and I'll handle the research, planning, and execution for you.</p>
-            <div className="chat-examples">
-              <p style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+            <p style={{ marginBottom: '32px', maxWidth: '600px', textAlign: 'center' }}>
+              I'm your AI-powered data science assistant. I can analyze trends, prediction markets, and financial data to provide deep insights.
+            </p>
+
+            {/* New Trending Section replacing old examples */}
+            <div style={{ width: '100%', maxWidth: '1000px' }}>
+              <HotDataPanel onSelectTopic={(topic) => {
+                setInputValue(topic);
+              }} />
+            </div>
+
+            <div className="chat-examples" style={{ marginTop: '20px' }}>
+              <p style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
                 <i className="fas fa-lightbulb" style={{ color: 'var(--warning-color)' }}></i>
-                <strong>Try asking me to:</strong>
+                <strong>Other things I can do:</strong>
               </p>
               <div className="example-chips">
                 <button onClick={() => setInputValue("Analyze customer data and create clustering visualizations")}>

@@ -3,7 +3,7 @@ from typing import Any
 from agno.agent import Agent
 from agno.tools.duckduckgo import DuckDuckGoTools
 from src.schema.models import Context, Step, ExecutionLog
-from src.utils.tools import WorkspaceTools, SearchWrapper, NewsNowWrapper, VisitAndSave
+from src.utils.tools import WorkspaceTools, SearchWrapper, NewsNowWrapper, VisitAndSave, HotDataWrapper
 
 class AnalystAgent:
     def __init__(self, workspace_tools: WorkspaceTools, enable_search: bool = True, 
@@ -13,6 +13,7 @@ class AnalystAgent:
         self.enable_news = enable_news
         self.search_wrapper = SearchWrapper(workspace_tools) if enable_search else None
         self.news_wrapper = NewsNowWrapper(workspace_tools) if enable_news else None
+        self.hot_data_wrapper = HotDataWrapper(workspace_tools) if enable_news else None
         self.visitor = None
 
     def initialize_visitor(self, model: Any, crawl_server_url: str = None):
@@ -37,14 +38,23 @@ class AnalystAgent:
         # Get project history (previous steps and shared state)
         project_history = context.get_project_history()
         
-        # Check if the task is opinion/news related
+        # Check if the task is opinion/news/hot topic related
+        user_goal_lower = context.user_goal.lower()
+        task_desc_lower = (step.task + " " + step.description).lower()
         is_opinion_related = NewsNowWrapper.is_opinion_related(step.task + " " + step.description) if self.enable_news else False
+        is_hot_topic_task = any(keyword in (user_goal_lower + task_desc_lower) for keyword in [
+            "热点", "舆情", "股票", "股价", "热搜", "趋势", "新闻", "话题",
+            "hot topic", "trending", "stock", "market", "sentiment", "news"
+        ])
         
         news_instruction = ""
-        if is_opinion_related and self.enable_news:
-            news_instruction = """\n        8. IMPORTANT: This task appears to be related to public opinion/news/trending topics.
-           Use the get_hot_topics_and_save tool to get the latest trending topics.
-           Available sources: weibo (微博), zhihu (知乎), baidu (百度), toutiao (今日头条), etc."""
+        if (is_opinion_related or is_hot_topic_task) and self.enable_news:
+            news_instruction = """\n        8. IMPORTANT: This task involves hot topics, public opinion, news, or market analysis.
+           - Use the get_hot_data_and_save tool to get trending topics from social media AND prediction markets (Polymarket).
+           - This tool is PREFERRED over visiting websites directly as it uses cached API data.
+           - Available sources for social media: weibo (微博), zhihu (知乎), baidu (百度), toutiao (今日头条), etc.
+           - Prediction market data includes current odds and event descriptions from Polymarket.
+           - For stock data analysis, recommend using 'akshare' library (use CodeAgent) instead of Yahoo Finance/Alpha Vantage."""
         
         prompt = f"""
         You are an expert Data Analyst and Researcher.
@@ -100,6 +110,9 @@ class AnalystAgent:
         # Add news search tool for opinion-related tasks
         if self.enable_news and self.news_wrapper:
             tools.append(self.news_wrapper.get_hot_topics_and_save)
+        
+        if self.enable_news and self.hot_data_wrapper:
+            tools.append(self.hot_data_wrapper.get_hot_data_and_save)
         
         if self.visitor:
             tools.append(self.visitor.visit_and_save)

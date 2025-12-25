@@ -4,6 +4,7 @@ import { SystemStatus, SystemConfig, LogEntry } from '../types'
 import ChatInterface from './ChatInterface'
 import FileManager from './FileManager'
 import ProgressBar from './ProgressBar'
+import HotDataPanel from './HotDataPanel'
 import '../styles/console.css'
 
 const AgentConsole: React.FC = () => {
@@ -755,17 +756,19 @@ const AgentConsole: React.FC = () => {
               config={config}
             />
           )}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <ChatInterface
-              logs={currentSessionId ? (sessions.find(s => s.id === currentSessionId)?.logs || []) : status.logs}
-              onSendMessage={handleSendMessage}
-              config={config}
-              onConfigChange={setConfig}
-              waitingForInput={status.waiting_for_input}
-              inputPrompt={inputPrompt}
-              onFileUpload={handleFileUpload}
-              isAgentRunning={status.is_running}
-            />
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <ChatInterface
+                logs={currentSessionId ? (sessions.find(s => s.id === currentSessionId)?.logs || []) : status.logs}
+                onSendMessage={handleSendMessage}
+                config={config}
+                onConfigChange={setConfig}
+                waitingForInput={status.waiting_for_input}
+                inputPrompt={inputPrompt}
+                onFileUpload={handleFileUpload}
+                isAgentRunning={status.is_running}
+              />
+            </div>
           </div>
         </div>
 

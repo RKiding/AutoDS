@@ -22,6 +22,7 @@ CONFIG_FILE = os.path.join(PROJECT_ROOT, 'agent_config.yaml')
 
 from src.main import AgentSystem
 from src.schema.config import load_agent_config
+from src.utils.tools import NewsNowWrapper, PolymarketWrapper, WorkspaceTools, HotDataCache
 
 app = FastAPI()
 
@@ -488,6 +489,67 @@ def cancel_input():
     session.input_event.set()
     session.logs.append({"timestamp": time.time(), "message": "User cancelled input request", "type": "control"})
     return {"status": "cancelled"}
+
+@app.get("/api/hot-data")
+def get_hot_data(background_tasks: BackgroundTasks):
+    """Fetch hot data from Polymarket and NewsNow with background pre-fetching"""
+    try:
+        # Initialize tools
+        ws_tools = WorkspaceTools(session.workspace_root)
+        nn_wrapper = NewsNowWrapper(ws_tools)
+        pm_wrapper = PolymarketWrapper(ws_tools)
+        
+        # Try to get from cache first for immediate response
+        pm_markets = pm_wrapper.get_active_markets(limit=10)
+        
+        nn_data = {}
+        # Expanded list of sources - all available platforms
+        sources = [
+            "weibo", "zhihu", "baidu", "toutiao", "douyin", 
+            "bilibili", "thepaper", "36kr", "ithome", 
+            "wallstreetcn", "cls", "caixin", "yicai", 
+            "sina-finance", "eastmoney", "jiemian"
+        ]
+        
+        # Check if we have all sources in cache
+        for source in sources:
+            cache_key = f"newsnow_{source}_10"
+            cached = HotDataCache.get(cache_key)
+            if cached and "items" in cached:
+                nn_data[source] = cached["items"]
+            else:
+                # If not cached, fetch immediately for this request
+                try:
+                    result = nn_wrapper.get_news(source, count=10)
+                    if result and "items" in result:
+                        nn_data[source] = result["items"]
+                except Exception as e:
+                    print(f"Error fetching {source}: {e}")
+                    # Continue with other sources even if one fails
+        
+        return {
+            "status": "success",
+            "polymarket": pm_markets or [],
+            "newsnow": nn_data
+        }
+    except Exception as e:
+        print(f"Error in get_hot_data: {e}")
+        return {
+            "status": "error", 
+            "message": str(e),
+            "polymarket": [],
+            "newsnow": {}
+        }
+
+def refresh_hot_data_cache(sources):
+    """Background task to refresh cache"""
+    try:
+        ws_tools = WorkspaceTools(session.workspace_root)
+        nn_wrapper = NewsNowWrapper(ws_tools)
+        for source in sources:
+            nn_wrapper.get_news(source, count=10)
+    except:
+        pass
 
 @app.get("/api/config")
 def get_config():
